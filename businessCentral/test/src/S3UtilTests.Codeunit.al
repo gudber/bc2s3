@@ -49,7 +49,7 @@ codeunit 85578 "ADLSE S3 Util Tests"
         ADLSES3Util.PutObject(ObjectUrlTok, 'a,b\r\n', 'text/csv');
 
         // [THEN] A PUT went to the object's URL
-        LibraryAssert.AreEqual(HttpRequestType::Put, RequestedMethod, 'method');
+        LibraryAssert.AreEqual(Format(HttpRequestType::Put), Format(RequestedMethod), 'method');
         LibraryAssert.AreEqual(ObjectUrlTok, RequestedUrl, 'url');
     end;
 
@@ -91,7 +91,7 @@ codeunit 85578 "ADLSE S3 Util Tests"
         Content := ADLSES3Util.GetObject(ObjectUrlTok, ObjectExists);
 
         // [THEN] A GET went to the object's URL and its content came back
-        LibraryAssert.AreEqual(HttpRequestType::Get, RequestedMethod, 'method');
+        LibraryAssert.AreEqual(Format(HttpRequestType::Get), Format(RequestedMethod), 'method');
         LibraryAssert.AreEqual(ObjectUrlTok, RequestedUrl, 'url');
         LibraryAssert.IsTrue(ObjectExists, 'The object should exist');
         LibraryAssert.AreEqual(ResponseBody, Content, 'content');
