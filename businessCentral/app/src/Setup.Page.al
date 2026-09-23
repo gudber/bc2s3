@@ -13,7 +13,7 @@ page 82560 "ADLSE Setup"
     SourceTable = "ADLSE Setup";
     InsertAllowed = false;
     DeleteAllowed = false;
-    Caption = 'Malia integration';
+    Caption = 'Malia Data Silo Export';
     layout
     {
         area(Content)

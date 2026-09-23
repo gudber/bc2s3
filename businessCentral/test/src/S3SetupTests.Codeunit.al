@@ -17,6 +17,23 @@ codeunit 85579 "ADLSE S3 Setup Tests"
         IsInitialized: Boolean;
 
     [Test]
+    procedure TestNewSetup_StorageTypeIsS3()
+    var
+        ADLSESetup: Record "ADLSE Setup";
+    begin
+        // [SCENARIO] A new setup exports to S3 unless another storage type is chosen
+        // [GIVEN] No setup
+        Initialize();
+
+        // [WHEN] The setup is created, as when the setup page is first opened
+        ADLSESetup.GetOrCreate();
+
+        // [THEN] Its storage type is S3
+        ADLSESetup.Get(0);
+        LibraryAssert.AreEqual("ADLSE Storage Type"::S3, ADLSESetup."Storage Type", 'Storage type');
+    end;
+
+    [Test]
     procedure TestStorageType_S3_ClearsOtherStorageSettings()
     var
         ADLSESetup: Record "ADLSE Setup";

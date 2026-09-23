@@ -95,6 +95,7 @@ table 82560 "ADLSE Setup"
         field(25; "Storage Type"; Enum "ADLSE Storage Type")
         {
             Caption = 'Storage type';
+            InitValue = S3;
             ToolTip = 'Specifies the type of storage type to use.';
 
             trigger OnValidate()

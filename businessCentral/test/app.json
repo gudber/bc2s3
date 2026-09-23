@@ -1,10 +1,10 @@
 {
   "id": "1a64f504-225f-4eda-b6a8-e8a4970b2e7a",
-  "name": "Malia integration Tests",
+  "name": "Malia Data Silo Export Tests",
   "publisher": "Malia",
   "version": "28.61.0.0",
-  "brief": "Tests for Malia integration",
-  "description": "Tests for Malia integration",
+  "brief": "Tests for Malia Data Silo Export",
+  "description": "Tests for Malia Data Silo Export",
   "privacyStatement": "",
   "EULA": "",
   "help": "",
@@ -44,7 +44,7 @@
     },
     {
       "publisher": "Malia",
-      "name": "Malia integration",
+      "name": "Malia Data Silo Export",
       "id": "efbd8e9d-3612-4996-bb16-784208b15e1d",
       "version": "28.61.0.0"
     }
