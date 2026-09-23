@@ -165,6 +165,22 @@ jobs:
           projectDependenciesJson: ${{ inputs.projectDependenciesJson }}
           baselineWorkflowRunId: ${{ inputs.baselineWorkflowRunId }}
 
+      # GitHub's Windows runners do not always have the Docker service running, and the build needs it for the Business Central container.
+      - name: Start Docker
+        if: steps.DetermineBuildProject.outputs.BuildIt == 'True'
+        shell: powershell
+        run: |
+          $service = Get-Service -Name docker
+          Write-Host "Docker service: $($service.Status)"
+          if ($service.Status -ne 'Running') { Start-Service -Name docker }
+          $deadline = (Get-Date).AddMinutes(5)
+          while ($true) {
+            docker version --format '{{.Server.Version}}' 2>$null
+            if ($LASTEXITCODE -eq 0) { break }
+            if ((Get-Date) -gt $deadline) { throw "Docker did not become ready within 5 minutes" }
+            Start-Sleep -Seconds 5
+          }
+
       - name: Build
         uses: microsoft/AL-Go-Actions/RunPipeline@v7.3
         if: steps.DetermineBuildProject.outputs.BuildIt == 'True'
