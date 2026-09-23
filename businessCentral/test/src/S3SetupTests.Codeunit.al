@@ -240,28 +240,26 @@ codeunit 85579 "ADLSE S3 Setup Tests"
     procedure TestSetupApi_SetsS3Settings()
     var
         ADLSESetup: Record "ADLSE Setup";
-        ADLSESetupApi: TestPage "ADLSE Setup API v12";
-        ShownStorageType: Text;
+        LibraryGraphMgt: Codeunit "Library - Graph Mgt";
+        TargetURL: Text;
+        ResponseText: Text;
     begin
         // [SCENARIO] The setup API chooses S3 and sets its endpoint, region and bucket
         // [GIVEN] A setup for Azure Data Lake
         Initialize();
         ADLSELibrarybc2adls.CreateAdlseSetup("Storage Type"::"Azure Data Lake");
+        ADLSESetup.Get(0);
+        Commit(); // the web service request runs in a session of its own
 
-        // [WHEN] S3 and its settings are set through the setup API
-        ADLSESetupApi.OpenEdit();
-        ADLSESetupApi.First();
-        ADLSESetupApi.storageType.SetValue("ADLSE Storage Type"::S3);
-        ADLSESetupApi.s3Endpoint.SetValue('https://fsn1.your-objectstorage.com');
-        ADLSESetupApi.s3Region.SetValue('fsn1');
-        ADLSESetupApi.s3Bucket.SetValue('malia-spike-test');
-        ShownStorageType := ADLSESetupApi.storageType.Value();
-        ADLSESetupApi.Close();
+        // [WHEN] S3 and its settings are patched through the setup API
+        TargetURL := LibraryGraphMgt.CreateTargetURL(ADLSESetup.SystemId, Page::"ADLSE Setup API v12", 'adlseSetup');
+        LibraryGraphMgt.PatchToWebService(TargetURL,
+            '{"storageType":"S3","s3Endpoint":"https://fsn1.your-objectstorage.com","s3Region":"fsn1","s3Bucket":"malia-spike-test"}',
+            ResponseText);
 
         // [THEN] The setup exports to that bucket on S3
         ADLSESetup.Get(0);
-        LibraryAssert.AreEqual('https://fsn1.your-objectstorage.com', ADLSESetup."S3 Endpoint", 'S3 Endpoint; the page showed storage type ' + ShownStorageType);
-        LibraryAssert.AreEqual("ADLSE Storage Type"::S3, ADLSESetup."Storage Type", 'Storage type; the page showed ' + ShownStorageType);
+        LibraryAssert.AreEqual("ADLSE Storage Type"::S3, ADLSESetup."Storage Type", 'Storage type');
         LibraryAssert.AreEqual('https://fsn1.your-objectstorage.com/malia-spike-test', ADLSESetup.GetS3BucketUrl(), 'bucket URL');
         LibraryAssert.AreEqual('fsn1', ADLSESetup."S3 Region", 'S3 Region');
     end;
