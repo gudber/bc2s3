@@ -1,8 +1,8 @@
 {
-  "id": "1688530c-452c-4b06-8947-ab4bf5b26053",
-  "name": "Azure Data Lake Storage Export",
-  "publisher": "The bc2adls team",
-  "brief": "Sync data from Business Central to Microsoft Fabric and Azure storage",
+  "id": "efbd8e9d-3612-4996-bb16-784208b15e1d",
+  "name": "Business Central S3 Export",
+  "publisher": "Malia",
+  "brief": "Sync data from Business Central to S3-compatible storage, Microsoft Fabric and Azure storage",
   "description": "Exports data in chosen tables to Microsoft Fabric and Azure Data Lake and keeps it in sync by incremental updates. Before you use this tool, please read the SUPPORT.md file at https://github.com/Bertverbeek4PS/bc2adls.",
   "version": "28.61.0.0",
   "privacyStatement": "https://go.microsoft.com/fwlink/?LinkId=724009",
@@ -32,9 +32,9 @@
       "id": "5d86850b-0d76-4eca-bd7b-951ad998e997"
     },
     {
-      "publisher": "The bc2adls team",
-      "name": "Azure Data Lake Storage Export Tests",
-      "id": "03486619-1622-4261-ae0e-b366b3c96e3c"
+      "publisher": "Malia",
+      "name": "Business Central S3 Export Tests",
+      "id": "1a64f504-225f-4eda-b6a8-e8a4970b2e7a"
     },
     {
       "publisher": "The bc2adls team",
