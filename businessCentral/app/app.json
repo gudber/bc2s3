@@ -1,6 +1,6 @@
 {
   "id": "efbd8e9d-3612-4996-bb16-784208b15e1d",
-  "name": "Business Central S3 Export",
+  "name": "Malia integration",
   "publisher": "Malia",
   "brief": "Sync data from Business Central to S3-compatible storage, Microsoft Fabric and Azure storage",
   "description": "Exports data in chosen tables to Microsoft Fabric and Azure Data Lake and keeps it in sync by incremental updates. Before you use this tool, please read the SUPPORT.md file at https://github.com/Bertverbeek4PS/bc2adls.",
@@ -33,7 +33,7 @@
     },
     {
       "publisher": "Malia",
-      "name": "Business Central S3 Export Tests",
+      "name": "Malia integration Tests",
       "id": "1a64f504-225f-4eda-b6a8-e8a4970b2e7a"
     },
     {

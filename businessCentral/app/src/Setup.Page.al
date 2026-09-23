@@ -13,7 +13,7 @@ page 82560 "ADLSE Setup"
     SourceTable = "ADLSE Setup";
     InsertAllowed = false;
     DeleteAllowed = false;
-    Caption = 'Export to Azure Data Lake Storage';
+    Caption = 'Malia integration';
     layout
     {
         area(Content)
