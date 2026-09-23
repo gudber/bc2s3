@@ -219,6 +219,33 @@ codeunit 85579 "ADLSE S3 Setup Tests"
         ADLSESetupPage.Close();
     end;
 
+    [Test]
+    procedure TestSetupApi_SetsS3Settings()
+    var
+        ADLSESetup: Record "ADLSE Setup";
+        ADLSESetupApi: TestPage "ADLSE Setup API v12";
+    begin
+        // [SCENARIO] The setup API chooses S3 and sets its endpoint, region and bucket
+        // [GIVEN] A setup for Azure Data Lake
+        Initialize();
+        ADLSELibrarybc2adls.CreateAdlseSetup("Storage Type"::"Azure Data Lake");
+
+        // [WHEN] S3 and its settings are set through the setup API
+        ADLSESetupApi.OpenEdit();
+        ADLSESetupApi.First();
+        ADLSESetupApi.storageType.SetValue("ADLSE Storage Type"::S3);
+        ADLSESetupApi.s3Endpoint.SetValue('https://fsn1.your-objectstorage.com');
+        ADLSESetupApi.s3Region.SetValue('fsn1');
+        ADLSESetupApi.s3Bucket.SetValue('malia-spike-test');
+        ADLSESetupApi.Close();
+
+        // [THEN] The setup exports to that bucket on S3
+        ADLSESetup.Get(0);
+        LibraryAssert.AreEqual("ADLSE Storage Type"::S3, ADLSESetup."Storage Type", 'Storage type');
+        LibraryAssert.AreEqual('https://fsn1.your-objectstorage.com/malia-spike-test', ADLSESetup.GetS3BucketUrl(), 'bucket URL');
+        LibraryAssert.AreEqual('fsn1', ADLSESetup."S3 Region", 'S3 Region');
+    end;
+
     local procedure Initialize()
     var
         LibraryTestInitialize: Codeunit "Library - Test Initialize";

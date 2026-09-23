@@ -29,6 +29,11 @@ page 82572 "ADLSE Setup API v12"
                     Editable = false;
                 }
                 field(container; Rec.Container) { }
+                // The storage type comes before the S3 settings, since choosing it clears the settings of the other types.
+                field(storageType; Rec."Storage Type") { }
+                field(s3Endpoint; Rec."S3 Endpoint") { }
+                field(s3Region; Rec."S3 Region") { }
+                field(s3Bucket; Rec."S3 Bucket") { }
                 field(emitTelemetry; Rec."Emit telemetry") { }
                 field(dataFormat; Rec.DataFormat) { }
                 field(maxPayloadSizeMiB; Rec.MaxPayloadSizeMiB) { }
