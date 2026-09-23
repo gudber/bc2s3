@@ -7,6 +7,7 @@ codeunit 82562 "ADLSE Communication"
 
     var
         ADLSECredentials: Codeunit "ADLSE Credentials";
+        ADLSES3Util: Codeunit "ADLSE S3 Util";
         TableID: Integer;
         FieldIdList: List of [Integer];
         DataBlobPath: Text;
@@ -44,6 +45,9 @@ codeunit 82562 "ADLSE Communication"
         MSFabricUrlTxt: Label 'https://onelake.dfs.fabric.microsoft.com/%1/%2.Lakehouse/Files', Locked = true, Comment = '%1: Workspace name, %2: Lakehouse Name';
         MSFabricUrlGuidTxt: Label 'https://onelake.dfs.fabric.microsoft.com/%1/%2/Files', Locked = true, Comment = '%1: Workspace name, %2: Lakehouse Name';
         ResetTableExportTxt: Label '/reset/%1.txt', Locked = true, Comment = '%1 = Table name';
+        S3DeltaObjectTok: Label '/deltas/%1/%2_%3.csv', Comment = '%1: Entity, %2: UTC time to the millisecond, %3: File identifier guid', Locked = true;
+        CsvContentTypeTok: Label 'text/csv', Locked = true;
+        JsonContentTypeTok: Label 'application/json', Locked = true;
 
     procedure SetupBlobStorage()
     var
@@ -76,6 +80,8 @@ codeunit 82562 "ADLSE Communication"
                     exit(StrSubstNo(MSFabricUrlGuidTxt, ADLSESetup.Workspace, ADLSESetup.Lakehouse));
             ADLSESetup."Storage Type"::"Open Mirroring":
                 exit(ADLSESetup.LandingZone);
+            ADLSESetup."Storage Type"::S3:
+                exit(ADLSESetup.GetS3BucketUrl());
         end;
     end;
 
@@ -90,6 +96,7 @@ codeunit 82562 "ADLSE Communication"
         FieldIdList := FieldIdListValue;
 
         ADLSECredentials.Init();
+        InitS3();
         EntityName := ADLSEUtil.GetDataLakeCompliantTableName(TableID);
 
         LastFlushedTimeStamp := LastFlushedTimeStampValue;
@@ -124,7 +131,7 @@ codeunit 82562 "ADLSE Communication"
         // check entity
         EntityJson := ADLSECdmUtil.CreateEntityContent(TableID, FieldIdList);
         BlobEntityPath := StrSubstNo(CorpusJsonPathTxt, StrSubstNo(EntityManifestNameTemplateTxt, EntityName));
-        OldJson := ADLSEGen2Util.GetBlobContent(GetBaseUrl() + BlobEntityPath, ADLSECredentials, BlobExists);
+        OldJson := GetJsonContent(GetBaseUrl() + BlobEntityPath, BlobExists);
         if BlobExists and not SchemaUpdate then
             ADLSECdmUtil.CheckChangeInEntities(OldJson, EntityJson, EntityName);
         if not ADLSECdmUtil.CompareEntityJsons(OldJson, EntityJson) then begin
@@ -137,9 +144,12 @@ codeunit 82562 "ADLSE Communication"
         end;
 
         // check manifest. Assume that if the data manifest needs change, the delta manifest will also need be updated
-        OldJson := ADLSEGen2Util.GetBlobContent(GetBaseUrl() + StrSubstNo(CorpusJsonPathTxt, DataCdmManifestNameTxt), ADLSECredentials, BlobExists);
-        NewJson := ADLSECdmUtil.UpdateDefaultManifestContent(OldJson, TableID, 'data', CdmDataFormat);
-        ManifestJsonsNeedsUpdate := JsonsDifferent(OldJson, NewJson);
+        // S3 keeps no manifests: they are updated by concurrent sessions under Azure blob leases, which S3 lacks.
+        if not IsS3() then begin
+            OldJson := ADLSEGen2Util.GetBlobContent(GetBaseUrl() + StrSubstNo(CorpusJsonPathTxt, DataCdmManifestNameTxt), ADLSECredentials, BlobExists);
+            NewJson := ADLSECdmUtil.UpdateDefaultManifestContent(OldJson, TableID, 'data', CdmDataFormat);
+            ManifestJsonsNeedsUpdate := JsonsDifferent(OldJson, NewJson);
+        end;
 
         if not SchemaUpdate then begin
             if EntityJsonNeedsUpdate then
@@ -277,7 +287,9 @@ codeunit 82562 "ADLSE Communication"
     begin
         ClearLastError();
         ADLSESetup.GetSingleton();
-        DataBlobCreated := CreateDataBlob(ADLSESetup.GetStorageType() = ADLSESetup."Storage Type"::"Open Mirroring");
+        // On S3 every flush puts its own object, so there is no blob to create ahead of it.
+        if not IsS3() then
+            DataBlobCreated := CreateDataBlob(ADLSESetup.GetStorageType() = ADLSESetup."Storage Type"::"Open Mirroring");
         LastTimestampExported := CollectAndSendRecord(RecordRef, RecordTimeStamp, DataBlobCreated, Deletes);
     end;
 
@@ -378,6 +390,7 @@ codeunit 82562 "ADLSE Communication"
         ADLSETable: Record "ADLSE Table";
         ADLSEGen2Util: Codeunit "ADLSE Gen 2 Util";
         ADLSEExecution: Codeunit "ADLSE Execution";
+        ADLSEUtil: Codeunit "ADLSE Util";
         ADLSE: Codeunit ADLSE;
         CustomDimensions: Dictionary of [Text, Text];
         BlockID: Text;
@@ -415,6 +428,11 @@ codeunit 82562 "ADLSE Communication"
                     BlobContentLength := ADLSEGen2Util.GetBlobContentLength(GetBaseUrl() + DataBlobPath, ADLSECredentials);
                     if ADLSESetup.GetStorageType() = ADLSESetup."Storage Type"::"Open Mirroring" then
                         RenameDataBlob();
+                end;
+            ADLSESetup."Storage Type"::S3:
+                begin
+                    DataBlobPath := StrSubstNo(S3DeltaObjectTok, EntityName, ADLSES3Util.ObjectTimestamp(CurrentDateTime()), ADLSEUtil.ToText(CreateGuid()));
+                    ADLSES3Util.PutObject(GetBaseUrl() + DataBlobPath, Payload.ToText(), CsvContentTypeTok);
                 end;
         end;
 
@@ -461,7 +479,10 @@ codeunit 82562 "ADLSE Communication"
             if ADLSESetup.GetStorageType() = ADLSESetup."Storage Type"::"Azure Data Lake" then
                 LeaseID := ADLSEGen2Util.AcquireLease(BlobPath, ADLSECredentials, BlobExists);
 
-            ADLSEGen2Util.CreateOrUpdateJsonBlob(BlobPath, ADLSECredentials, LeaseID, EntityJson);
+            if IsS3() then
+                ADLSES3Util.PutObject(BlobPath, JsonText(EntityJson), JsonContentTypeTok)
+            else
+                ADLSEGen2Util.CreateOrUpdateJsonBlob(BlobPath, ADLSECredentials, LeaseID, EntityJson);
 
             if ADLSESetup.GetStorageType() = ADLSESetup."Storage Type"::"Azure Data Lake" then
                 ADLSEGen2Util.ReleaseBlob(BlobPath, ADLSECredentials, LeaseID);
@@ -527,7 +548,43 @@ codeunit 82562 "ADLSE Communication"
                 ADLSEGen2Util.RemoveDeltasFromDataLake(ADLSEUtil.GetDataLakeCompliantTableName(ltableId), ADLSECredentials, AllCompanies);
             "ADLSE Storage Type"::"Open Mirroring":
                 ADLSEGen2Util.DropTableFromOpenMirroring(ADLSEUtil.GetDataLakeCompliantTableName(ltableId), ADLSECredentials, AllCompanies);
+            "ADLSE Storage Type"::S3:
+                ; // The objects already written stay: the full export that follows a reset writes new ones after them.
         end;
+    end;
+
+    local procedure IsS3(): Boolean
+    var
+        ADLSESetup: Record "ADLSE Setup";
+    begin
+        exit(ADLSESetup.GetStorageType() = ADLSESetup."Storage Type"::S3);
+    end;
+
+    local procedure InitS3()
+    var
+        ADLSESetup: Record "ADLSE Setup";
+    begin
+        if not IsS3() then
+            exit;
+        ADLSESetup.GetSingleton();
+        ADLSES3Util.Initialize(ADLSESetup."S3 Region", ADLSECredentials.GetClientID(), ADLSECredentials.GetClientSecret());
+    end;
+
+    local procedure GetJsonContent(Path: Text; var Exists: Boolean) Content: JsonObject
+    var
+        ADLSEGen2Util: Codeunit "ADLSE Gen 2 Util";
+        ContentText: Text;
+    begin
+        if not IsS3() then
+            exit(ADLSEGen2Util.GetBlobContent(Path, ADLSECredentials, Exists));
+        ContentText := ADLSES3Util.GetObject(Path, Exists);
+        if Exists then
+            Content.ReadFrom(ContentText);
+    end;
+
+    local procedure JsonText(Json: JsonObject) Result: Text
+    begin
+        Json.WriteTo(Result);
     end;
 
     local procedure UpdateInProgressTimeStampOnTable(TableIDToUpdate: Integer; Timestamp: BigInteger; Deletes: Boolean)

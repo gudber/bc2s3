@@ -55,12 +55,35 @@ codeunit 82585 "ADLSE S3 Util"
     /// The x-amz-date of a moment: its UTC time as yyyyMMddTHHmmssZ.
     /// </summary>
     procedure AmzDate(Moment: DateTime): Text
+    begin
+        exit(UtcBasicSeconds(Moment) + 'Z');
+    end;
+
+    /// <summary>
+    /// The UTC time of a moment to the millisecond, as yyyyMMddTHHmmssfffZ, so object names sort in the order they were written.
+    /// </summary>
+    procedure ObjectTimestamp(Moment: DateTime): Text
+    var
+        UtcIso8601: Text;
+        Milliseconds: Text;
+    begin
+        UtcIso8601 := Format(Moment, 0, 9);
+        Milliseconds := '000';
+        if CopyStr(UtcIso8601, 20, 1) = '.' then
+            Milliseconds := PadStr(CopyStr(UtcIso8601, 21, StrPos(UtcIso8601, 'Z') - 21), 3, '0');
+        exit(UtcBasicSeconds(Moment) + Milliseconds + 'Z');
+    end;
+
+    /// <summary>
+    /// The UTC time of a moment to the second, as yyyyMMddTHHmmss.
+    /// </summary>
+    local procedure UtcBasicSeconds(Moment: DateTime): Text
     var
         UtcIso8601: Text;
     begin
-        // Format 9 is ISO 8601 in UTC, e.g. 2013-05-24T00:00:07.123Z; the fraction is dropped.
+        // Format 9 is ISO 8601 in UTC, e.g. 2013-05-24T00:00:07.123Z, with the fraction only when there is one.
         UtcIso8601 := CopyStr(Format(Moment, 0, 9), 1, 19);
-        exit(UtcIso8601.Replace('-', '').Replace(':', '') + 'Z');
+        exit(UtcIso8601.Replace('-', '').Replace(':', ''));
     end;
 
     local procedure Send(Method: Text; Url: Text; Content: HttpContent) Response: HttpResponseMessage

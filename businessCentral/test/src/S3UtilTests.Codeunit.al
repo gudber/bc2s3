@@ -35,6 +35,36 @@ codeunit 85578 "ADLSE S3 Util Tests"
     end;
 
     [Test]
+    procedure TestObjectTimestamp_KeepsMilliseconds()
+    var
+        ADLSES3Util: Codeunit "ADLSE S3 Util";
+        Moment: DateTime;
+    begin
+        // [SCENARIO] Object names start with the UTC time to the millisecond, so they sort in the order they were written
+        // [GIVEN] A moment with milliseconds, given in UTC
+        Evaluate(Moment, '2013-05-24T00:00:07.045Z', 9);
+
+        // [WHEN] Its object timestamp is formatted
+        // [THEN] It has the milliseconds
+        LibraryAssert.AreEqual('20130524T000007045Z', ADLSES3Util.ObjectTimestamp(Moment), 'object timestamp');
+    end;
+
+    [Test]
+    procedure TestObjectTimestamp_WholeSecond_HasZeroMilliseconds()
+    var
+        ADLSES3Util: Codeunit "ADLSE S3 Util";
+        Moment: DateTime;
+    begin
+        // [SCENARIO] A moment on a whole second still has three millisecond digits, so all names have the same length
+        // [GIVEN] A moment on a whole second, given in UTC
+        Evaluate(Moment, '2013-05-24T00:00:07Z', 9);
+
+        // [WHEN] Its object timestamp is formatted
+        // [THEN] The milliseconds are 000
+        LibraryAssert.AreEqual('20130524T000007000Z', ADLSES3Util.ObjectTimestamp(Moment), 'object timestamp');
+    end;
+
+    [Test]
     [HandlerFunctions('S3Handler')]
     procedure TestPutObject_IssuesPutToObjectUrl()
     var

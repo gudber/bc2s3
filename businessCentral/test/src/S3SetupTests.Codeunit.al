@@ -152,6 +152,27 @@ codeunit 85579 "ADLSE S3 Setup Tests"
     end;
 
     [Test]
+    procedure TestCheckSetup_S3WithoutBucket_Errors()
+    var
+        ADLSESetup: Record "ADLSE Setup";
+        ADLSESetupCodeunit: Codeunit "ADLSE Setup";
+    begin
+        // [SCENARIO] An export to S3 cannot start without a bucket
+        // [GIVEN] A setup for S3 without a bucket
+        Initialize();
+        ADLSELibrarybc2adls.CreateAdlseSetup("Storage Type"::S3);
+        ADLSESetup.Get(0);
+        ADLSESetup."S3 Bucket" := '';
+        ADLSESetup.Modify();
+
+        // [WHEN] The setup is checked
+        asserterror ADLSESetupCodeunit.CheckSetup(ADLSESetup);
+
+        // [THEN] The missing bucket is reported
+        LibraryAssert.ExpectedError(ADLSESetup.FieldCaption("S3 Bucket"));
+    end;
+
+    [Test]
     procedure TestSetupPage_S3_ShowsS3SettingsOnly()
     var
         ADLSESetupPage: TestPage "ADLSE Setup";

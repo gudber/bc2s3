@@ -91,6 +91,11 @@ codeunit 82560 "ADLSE Setup"
             ADLSESetup.TestField(Workspace);
         if ADLSESetup."Storage Type" = ADLSESetup."Storage Type"::"Open Mirroring" then
             ADLSESetup.TestField(LandingZone);
+        if ADLSESetup."Storage Type" = ADLSESetup."Storage Type"::S3 then begin
+            ADLSESetup.TestField("S3 Endpoint");
+            ADLSESetup.TestField("S3 Region");
+            ADLSESetup.TestField("S3 Bucket");
+        end;
 
         ADLSESetup.CheckSchemaExported();
 
