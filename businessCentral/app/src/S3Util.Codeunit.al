@@ -12,6 +12,7 @@ codeunit 82585 "ADLSE S3 Util"
         SecretAccessKey: SecretText;
         UnsignedPayloadTok: Label 'UNSIGNED-PAYLOAD', Locked = true;
         RequestFailedErr: Label 'The %1 request to %2 failed. %3', Comment = '%1: HTTP method, %2: object URL, %3: reason or S3''s response';
+        AuthorizationHeaderRejectedErr: Label 'The Authorization header could not be added to the request.';
         RequestRejectedErr: Label 'The %1 request to %2 failed with HTTP status %3. %4', Comment = '%1: HTTP method, %2: object URL, %3: HTTP status code, %4: S3''s response';
 
     procedure Initialize(RegionValue: Text; AccessKeyIdValue: Text; SecretAccessKeyValue: SecretText)
@@ -85,7 +86,9 @@ codeunit 82585 "ADLSE S3 Util"
         Request.GetHeaders(RequestHeaders);
         RequestHeaders.Add('x-amz-content-sha256', SignedHeaders.Get('x-amz-content-sha256'));
         RequestHeaders.Add('x-amz-date', SignedHeaders.Get('x-amz-date'));
-        RequestHeaders.Add('Authorization', ADLSES3Signer.Authorization(Method, Path, Query, SignedHeaders, UnsignedPayloadTok, Region, AccessKeyId, SecretAccessKey));
+        // Added without validation: HttpHeaders rejects the comma-separated parameters of a Signature Version 4 Authorization value.
+        if not RequestHeaders.TryAddWithoutValidation('Authorization', ADLSES3Signer.Authorization(Method, Path, Query, SignedHeaders, UnsignedPayloadTok, Region, AccessKeyId, SecretAccessKey)) then
+            Error(RequestFailedErr, Method, Url, AuthorizationHeaderRejectedErr);
 
         if not Client.Send(Request, Response) then
             Error(RequestFailedErr, Method, Url, GetLastErrorText());
