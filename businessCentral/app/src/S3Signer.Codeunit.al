@@ -134,11 +134,14 @@ codeunit 82584 "ADLSE S3 Signer"
     var
         Item: Text;
         Index: Integer;
+        Position: Integer;
     begin
         foreach Item in Items do begin
-            Index := 1;
-            while (Index <= Result.Count()) and not IsOrdinalLess(Item, Result.Get(Index)) do
-                Index += 1;
+            // AL evaluates both sides of 'and', so the insert position is found without relying on short-circuiting.
+            Index := Result.Count() + 1;
+            for Position := Result.Count() downto 1 do
+                if IsOrdinalLess(Item, Result.Get(Position)) then
+                    Index := Position;
             if Index > Result.Count() then
                 Result.Add(Item)
             else
