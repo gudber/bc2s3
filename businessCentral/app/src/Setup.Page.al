@@ -30,16 +30,21 @@ page 82560 "ADLSE Setup"
                     end;
                 }
 
-                field("Tenant ID"; StorageTenantID)
+                group(TenantSettings)
                 {
-                    Caption = 'Tenant ID';
+                    ShowCaption = false;
                     Visible = not S3Storage;
-                    ToolTip = 'Specifies the tenant ID which holds the app registration as well as the storage account. Note that they have to be on the same tenant.';
 
-                    trigger OnValidate()
-                    begin
-                        ADLSECredentials.SetTenantID(StorageTenantID);
-                    end;
+                    field("Tenant ID"; StorageTenantID)
+                    {
+                        Caption = 'Tenant ID';
+                        ToolTip = 'Specifies the tenant ID which holds the app registration as well as the storage account. Note that they have to be on the same tenant.';
+
+                        trigger OnValidate()
+                        begin
+                            ADLSECredentials.SetTenantID(StorageTenantID);
+                        end;
+                    }
                 }
 
                 group(AzureDataLakeSettings)
