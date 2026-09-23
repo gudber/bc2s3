@@ -52,9 +52,11 @@ codeunit 82565 "ADLSE Credentials"
         ADLSESetup: Record "ADLSE Setup";
     begin
         Init();
-        CheckValueExists(TenantIdKeyNameTok, StorageTenantID);
-        CheckValueExists(ClientIdKeyNameTok, ClientID);
         ADLSESetup.GetSingleton();
+        // S3 signs requests with an access key (kept as the client id and secret), so it has no tenant.
+        if ADLSESetup."Storage Type" <> ADLSESetup."Storage Type"::S3 then
+            CheckValueExists(TenantIdKeyNameTok, StorageTenantID);
+        CheckValueExists(ClientIdKeyNameTok, ClientID);
         if ADLSESetup."Use Certificate Authentication" then
             CheckValueExists(ClientCertificateKeyNameTok, ClientCertificate)
         else

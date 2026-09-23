@@ -121,6 +121,19 @@ table 82560 "ADLSE Setup"
                             Rec.Container := '';
                             Rec."Account Name" := '';
                         end;
+                    "ADLSE Storage Type"::S3:
+                        begin
+                            Rec.Workspace := '';
+                            Rec.Lakehouse := '';
+                            Rec.LandingZone := '';
+                            Rec.Container := '';
+                            Rec."Account Name" := '';
+                        end;
+                end;
+                if Rec."Storage Type" <> "ADLSE Storage Type"::S3 then begin
+                    Rec."S3 Endpoint" := '';
+                    Rec."S3 Region" := '';
+                    Rec."S3 Bucket" := '';
                 end;
             end;
         }
@@ -268,6 +281,29 @@ table 82560 "ADLSE Setup"
             InitValue = false;
             DataClassification = SystemMetadata;
         }
+        field(115; "S3 Endpoint"; Text[250])
+        {
+            Caption = 'S3 endpoint';
+            ToolTip = 'Specifies the https address of the S3-compatible storage, without the bucket, e.g. https://fsn1.your-objectstorage.com.';
+
+            trigger OnValidate()
+            begin
+                Rec."S3 Endpoint" := CopyStr(Rec."S3 Endpoint".TrimEnd('/'), 1, MaxStrLen(Rec."S3 Endpoint"));
+                // Request bodies are sent unsigned, so they must travel over TLS.
+                if (Rec."S3 Endpoint" <> '') and not Rec."S3 Endpoint".StartsWith('https://') then
+                    Error(S3EndpointNotHttpsErr);
+            end;
+        }
+        field(120; "S3 Region"; Text[30])
+        {
+            Caption = 'S3 region';
+            ToolTip = 'Specifies the region requests are signed for, e.g. fsn1 for Hetzner Falkenstein or us-east-1 for AWS.';
+        }
+        field(125; "S3 Bucket"; Text[63])
+        {
+            Caption = 'S3 bucket';
+            ToolTip = 'Specifies the bucket the data is exported to.';
+        }
     }
 
     keys
@@ -299,6 +335,7 @@ table 82560 "ADLSE Setup"
         SchemaAlreadyExportedErr: Label 'Schema already exported. Please perform the action "clear schema export date" before changing the schema.';
         MaximumRetriesErr: Label 'Please enter a value that is equal or smaller than 10 for the maximum retries.';
         NoSchemaExportedErr: Label 'No schema has been exported yet. Please export schema first before exporting the data.';
+        S3EndpointNotHttpsErr: Label 'The S3 endpoint must start with https://.';
 
     local procedure TextCharactersOtherThan(String: Text; CharString: Text): Boolean
     var
@@ -335,6 +372,14 @@ table 82560 "ADLSE Setup"
     local procedure GetPrimaryKeyValue() PKValue: Integer
     begin
         Evaluate(PKValue, PrimaryKeyValueLbl, 9);
+    end;
+
+    /// <summary>
+    /// The bucket's URL, path-style: the endpoint followed by the bucket.
+    /// </summary>
+    procedure GetS3BucketUrl(): Text
+    begin
+        exit(Rec."S3 Endpoint" + '/' + Rec."S3 Bucket");
     end;
 
     procedure GetStorageType(): Enum "ADLSE Storage Type"

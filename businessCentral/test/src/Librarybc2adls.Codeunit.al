@@ -19,6 +19,11 @@ codeunit 85561 "ADLSE Library - bc2adls"
             ADLSESetup."Storage Type" := "Storage Type"::"Azure Data Lake";
             ADLSESetup.Container := 'bc2adls';
             ADLSESetup."Account Name" := 'bc2adls';
+        end else if "Storage Type" = "Storage Type"::S3 then begin
+            ADLSESetup."Storage Type" := "Storage Type"::S3;
+            ADLSESetup."S3 Endpoint" := 'https://fsn1.your-objectstorage.com';
+            ADLSESetup."S3 Region" := 'fsn1';
+            ADLSESetup."S3 Bucket" := 'bc2adls';
         end else if "Storage Type" = "Storage Type"::"Open Mirroring" then begin
             ADLSESetup."Storage Type" := "Storage Type"::"Open Mirroring";
             ADLSESetup.LandingZone := 'https://bc2adls.fabric.microsoft.com';

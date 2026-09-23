@@ -18,4 +18,8 @@ enum 82563 "ADLSE Storage Type"
     {
         Caption = 'Microsoft Fabric - Open Mirroring';
     }
+    value(3; S3)
+    {
+        Caption = 'S3-compatible storage';
+    }
 }

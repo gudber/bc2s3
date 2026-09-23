@@ -33,6 +33,7 @@ page 82560 "ADLSE Setup"
                 field("Tenant ID"; StorageTenantID)
                 {
                     Caption = 'Tenant ID';
+                    Visible = not S3Storage;
                     ToolTip = 'Specifies the tenant ID which holds the app registration as well as the storage account. Note that they have to be on the same tenant.';
 
                     trigger OnValidate()
@@ -53,7 +54,7 @@ page 82560 "ADLSE Setup"
                 group(MSFabricSettings)
                 {
                     Caption = 'Microsoft Fabric';
-                    Visible = not AzureDataLake;
+                    Visible = not AzureDataLake and not S3Storage;
 
                     field(Workspace; Rec.Workspace)
                     {
@@ -69,9 +70,43 @@ page 82560 "ADLSE Setup"
                     }
                 }
 
+                group(S3Settings)
+                {
+                    Caption = 'S3-compatible storage';
+                    Visible = S3Storage;
+
+                    field(S3Endpoint; Rec."S3 Endpoint") { }
+                    field(S3Region; Rec."S3 Region") { }
+                    field(S3Bucket; Rec."S3 Bucket") { }
+                    field(S3AccessKeyId; ClientID)
+                    {
+                        Caption = 'Access key ID';
+                        ExtendedDatatype = Masked;
+                        ToolTip = 'Specifies the access key ID of the S3 credentials.';
+
+                        trigger OnValidate()
+                        begin
+                            ADLSECredentials.SetClientID(ClientID);
+                        end;
+                    }
+                    field(S3SecretAccessKey; ClientSecret)
+                    {
+                        Caption = 'Secret access key';
+                        ExtendedDatatype = Masked;
+                        ToolTip = 'Specifies the secret access key of the S3 credentials.';
+
+                        trigger OnValidate()
+                        begin
+                            ADLSECredentials.SetClientSecret(ClientSecret);
+                            CurrPage.Update(true);
+                        end;
+                    }
+                }
+
                 group(AppRegistration)
                 {
                     Caption = 'App Registration';
+                    Visible = not S3Storage;
 
                     field("Client ID"; ClientID)
                     {
@@ -468,7 +503,7 @@ page 82560 "ADLSE Setup"
     }
 
     var
-        FabricOpenMirroring, AzureDataLake : Boolean;
+        FabricOpenMirroring, AzureDataLake, S3Storage : Boolean;
         CertificateVisible, SecretVisible : Boolean;
         ClientSecretLbl: Label 'Secret not shown';
         ClientIdLbl: Label 'ID not shown';
@@ -502,6 +537,7 @@ page 82560 "ADLSE Setup"
         UpdateNotificationIfAnyTableExportFailed();
         AzureDataLake := Rec."Storage Type" = Rec."Storage Type"::"Azure Data Lake";
         FabricOpenMirroring := Rec."Storage Type" = Rec."Storage Type"::"Open Mirroring";
+        S3Storage := Rec."Storage Type" = Rec."Storage Type"::S3;
         UpdateAuthVisibility();
         UpdateCertificateStatus();
     end;
