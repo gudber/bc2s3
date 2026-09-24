@@ -27,7 +27,8 @@ codeunit 82560 "ADLSE Setup"
     /// <summary>
     /// Exports every business table with all the fields that can be exported. Tables already exported keep the
     /// fields chosen for them. Left out: this extension's own tables, which change on every export, BC's system
-    /// tables, the infrastructure tables below, and tables that are not normal tables or have been removed. Adding tables changes the schema, so the
+    /// tables, the infrastructure tables below, tables the user may not read, and tables that are not normal tables or
+    /// have been removed. Adding tables changes the schema, so the
     /// schema export date is cleared.
     /// </summary>
     procedure AddAllTables()
@@ -36,6 +37,7 @@ codeunit 82560 "ADLSE Setup"
         AllObj: Record AllObj;
         TableMetadata: Record "Table Metadata";
         ADLSEExecution: Codeunit "ADLSE Execution";
+        ADLSEUtil: Codeunit "ADLSE Util";
         ThisExtension: ModuleInfo;
     begin
         NavApp.GetCurrentModuleInfo(ThisExtension);
@@ -50,13 +52,14 @@ codeunit 82560 "ADLSE Setup"
                     if not IsInfrastructure(AllObj."Object ID") then
                         if TableMetadata.Get(AllObj."Object ID") then
                             if TableMetadata.TableType = TableMetadata.TableType::Normal then
-                                if TableMetadata.ObsoleteState <> TableMetadata.ObsoleteState::Removed then begin
-                                    ADLSETable.Init();
-                                    ADLSETable."Table ID" := AllObj."Object ID";
-                                    ADLSETable.Enabled := true;
-                                    ADLSETable.Insert(true);
-                                    ADLSETable.AddAllFields();
-                                end;
+                                if TableMetadata.ObsoleteState <> TableMetadata.ObsoleteState::Removed then
+                                    if ADLSEUtil.CanReadTable(AllObj."Object ID") then begin
+                                        ADLSETable.Init();
+                                        ADLSETable."Table ID" := AllObj."Object ID";
+                                        ADLSETable.Enabled := true;
+                                        ADLSETable.Insert(true);
+                                        ADLSETable.AddAllFields();
+                                    end;
             until AllObj.Next() = 0;
     end;
 

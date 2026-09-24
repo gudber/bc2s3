@@ -533,6 +533,17 @@ codeunit 82564 "ADLSE Util"
         OnAfterCreateCsvPayload(RecordRef, FieldIdList, AddHeaders, Deletes, RecordPayload);
     end;
 
+    /// <summary>
+    /// Whether the current user may read a table. BC's license can forbid reading some tables to everyone, even SUPER.
+    /// </summary>
+    internal procedure CanReadTable(TableID: Integer): Boolean
+    var
+        RecordRef: RecordRef;
+    begin
+        RecordRef.Open(TableID);
+        exit(RecordRef.ReadPermission());
+    end;
+
     internal procedure IsTablePerCompany(TableID: Integer): Boolean
     var
         TableMetadata: Record "Table Metadata";

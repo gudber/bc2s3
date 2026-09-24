@@ -18,6 +18,7 @@ codeunit 82569 "ADLSE Execution"
         ExportStartedTxt: Label 'Data export started for %1 out of %2 tables. Please refresh this page to see the latest export state for the tables. Only those tables that either have had changes since the last export or failed to export last time have been included. The tables for which the exports could not be started have been queued up for later.', Comment = '%1 = number of tables to start the export for. %2 = total number of tables enabled for export.';
         SuccessfulStopMsg: Label 'The export process was stopped successfully.';
         ClearSchemaExportedOnMsg: Label 'The schema export date has been cleared.';
+        TableNotReadableTxt: Label 'Table %1 was not exported because the user may not read it.', Comment = '%1: table number', Locked = true;
 
 
     [InherentPermissions(PermissionObjectType::TableData, Database::"ADLSE Table", 'r')]
@@ -72,8 +73,13 @@ codeunit 82569 "ADLSE Execution"
                 ADLSEField.SetRange("Table ID", ADLSETable."Table ID");
                 ADLSEField.SetRange(Enabled, true);
                 if not ADLSEField.IsEmpty() then
-                    if ADLSESessionManager.StartExport(ADLSETable."Table ID", EmitTelemetry) then
-                        Started += 1;
+                    // A table the user may not read is skipped, rather than stopping the export of the tables after it.
+                    if ADLSEUtil.CanReadTable(ADLSETable."Table ID") then begin
+                        if ADLSESessionManager.StartExport(ADLSETable."Table ID", EmitTelemetry) then
+                            Started += 1;
+                    end else
+                        if EmitTelemetry then
+                            Log('ADLSE-042', StrSubstNo(TableNotReadableTxt, ADLSETable."Table ID"), Verbosity::Warning);
             until ADLSETable.Next() = 0;
 
         if HasSyncCompanyRecord then begin
