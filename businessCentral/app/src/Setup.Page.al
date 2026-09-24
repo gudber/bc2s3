@@ -377,6 +377,39 @@ page 82560 "ADLSE Setup"
                 end;
             }
 
+            action(AddAllTables)
+            {
+                ApplicationArea = All;
+                Caption = 'Add all tables';
+                ToolTip = 'Exports every business table with all its fields. Tables already exported keep their fields. Left out are this extension''s tables, system tables, tables you may not read, and tables that are not business data, such as logs, job queue, API copies of documents and personal settings. Export the schema again afterwards.';
+                Image = AllLines;
+                Enabled = not ExportInProgress;
+
+                trigger OnAction()
+                var
+                    ADLSETable: Record "ADLSE Table";
+                    ADLSESetup: Codeunit "ADLSE Setup";
+                begin
+                    ADLSESetup.AddAllTables();
+                    Message(AllTablesAddedMsg, ADLSETable.Count());
+                    CurrPage.Update(false);
+                end;
+            }
+            action(ScheduleEvery30Minutes)
+            {
+                ApplicationArea = All;
+                Caption = 'Schedule every 30 minutes';
+                ToolTip = 'Creates, or updates, one job queue entry that starts the export every 30 minutes every day, ready to run as you. Exports run only within the export window, if one is set.';
+                Image = Timesheet;
+
+                trigger OnAction()
+                var
+                    ADLSESetup: Codeunit "ADLSE Setup";
+                begin
+                    ADLSESetup.ScheduleExport(30);
+                    Message(ScheduledMsg);
+                end;
+            }
             action(Schedule)
             {
                 ApplicationArea = All;
@@ -501,6 +534,8 @@ page 82560 "ADLSE Setup"
                     actionref(StopExport_Promoted; StopExport) { }
                     actionref(SchemaExport_Promoted; SchemaExport) { }
                     actionref(Schedule_Promoted; Schedule) { }
+                    actionref(AddAllTables_Promoted; AddAllTables) { }
+                    actionref(ScheduleEvery30Minutes_Promoted; ScheduleEvery30Minutes) { }
                     actionref(ClearSchemaExported_Promoted; ClearSchemaExported) { }
                 }
                 actionref(ClearDeletedRecordsList_Promoted; ClearDeletedRecordsList) { }
@@ -564,6 +599,8 @@ page 82560 "ADLSE Setup"
         OldLogsExist: Boolean;
         FailureNotificationID: Guid;
         ExportFailureNotificationMsg: Label 'Data from one or more tables failed to export on the last run. Please check the tables below to see the error(s).';
+        AllTablesAddedMsg: Label '%1 tables are exported. Export the schema before the next export.', Comment = '%1: number of tables';
+        ScheduledMsg: Label 'The export is scheduled every 30 minutes and runs as you; within the export window, if one is set.';
         UsePrimaryKeyForMirroringConfirmQst: Label 'Changing this setting requires clearing the exported schema and resetting all tables. All data will be re-exported from scratch on the next run. Do you want to continue?';
 
     local procedure UpdateAuthVisibility()

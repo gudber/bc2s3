@@ -149,6 +149,57 @@ codeunit 85581 "ADLSE Add All Tables Tests"
         LibraryAssert.AreEqual(0DT, ADLSESetupRecord."Schema Exported On", 'Schema exported on');
     end;
 
+    [Test]
+    [HandlerFunctions('MessageHandler')]
+    procedure TestSetupPage_AddAllTablesAction_AddsTheBusinessTables()
+    var
+        ADLSETable: Record "ADLSE Table";
+        ADLSESetupPage: TestPage "ADLSE Setup";
+    begin
+        // [SCENARIO] Without the command line, all tables are added from the setup page
+        // [GIVEN] An S3 setup exporting nothing yet
+        Initialize();
+
+        // [WHEN] Add all tables is chosen on the setup page
+        ADLSESetupPage.OpenEdit();
+        ADLSESetupPage.AddAllTables.Invoke();
+        ADLSESetupPage.Close();
+
+        // [THEN] The business tables are exported
+        LibraryAssert.IsTrue(ADLSETable.Get(Database::Customer), 'Customers should be exported');
+        LibraryAssert.IsTrue(ADLSETable.Get(Database::"G/L Entry"), 'G/L entries should be exported');
+    end;
+
+    [Test]
+    [HandlerFunctions('MessageHandler')]
+    procedure TestSetupPage_ScheduleEvery30MinutesAction_MakesAJobQueueEntryReadyToRun()
+    var
+        JobQueueEntry: Record "Job Queue Entry";
+        ADLSESetupPage: TestPage "ADLSE Setup";
+    begin
+        // [SCENARIO] Without the command line, the export is scheduled from the setup page, ready to run
+        // [GIVEN] An S3 setup
+        Initialize();
+
+        // [WHEN] Schedule every 30 minutes is chosen on the setup page
+        ADLSESetupPage.OpenEdit();
+        ADLSESetupPage.ScheduleEvery30Minutes.Invoke();
+        ADLSESetupPage.Close();
+
+        // [THEN] A recurring job queue entry runs the export every 30 minutes
+        JobQueueEntry.SetRange("Object Type to Run", JobQueueEntry."Object Type to Run"::Report);
+        JobQueueEntry.SetRange("Object ID to Run", Report::"ADLSE Schedule Task Assignment");
+        JobQueueEntry.FindFirst();
+        LibraryAssert.AreEqual(30, JobQueueEntry."No. of Minutes between Runs", 'minutes between runs');
+        LibraryAssert.AreEqual(JobQueueEntry.Status::Ready, JobQueueEntry.Status, 'status');
+        JobQueueEntry.DeleteAll(true);
+    end;
+
+    [MessageHandler]
+    procedure MessageHandler(Message: Text[1024])
+    begin
+    end;
+
     local procedure BusinessTables() Tables: List of [Integer]
     begin
         Tables.Add(Database::"Payment Terms");
