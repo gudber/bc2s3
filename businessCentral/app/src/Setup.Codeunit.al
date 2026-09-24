@@ -245,20 +245,40 @@ codeunit 82560 "ADLSE Setup"
     [InherentPermissions(PermissionObjectType::TableData, Database::"ADLSE Current Session", 'd')]
     [EventSubscriber(ObjectType::Codeunit, Codeunit::System.DataAdministration."Environment Cleanup", OnClearDatabaseConfig, '', false, false)]
     local procedure EnvironmentCleanup_OnClearDatabaseConfig(SourceEnv: Enum System.DataAdministration."Environment Type"; DestinationEnv: Enum System.DataAdministration."Environment Type")
-    var
-        ADLSESetup: Record "ADLSE Setup";
-        ADLSECurrentSession: Record "ADLSE Current Session";
     begin
         if DestinationEnv <> DestinationEnv::Sandbox then
             exit;
+        ClearForSandboxCopy();
+    end;
+
+    /// <summary>
+    /// Makes a sandbox copied from another environment export nowhere: it clears where the data went and, for S3, the
+    /// access keys, so that the copy cannot write into the source environment's storage.
+    /// </summary>
+    [InherentPermissions(PermissionObjectType::TableData, Database::"ADLSE Setup", 'rm')]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"ADLSE Current Session", 'd')]
+    procedure ClearForSandboxCopy()
+    var
+        ADLSESetup: Record "ADLSE Setup";
+        ADLSECurrentSession: Record "ADLSE Current Session";
+        ADLSECredentials: Codeunit "ADLSE Credentials";
+    begin
         if not ADLSESetup.Exists() then
             exit;
+        ADLSESetup.GetSingleton();
+        if ADLSESetup."Storage Type" = ADLSESetup."Storage Type"::S3 then begin
+            ADLSECredentials.SetClientID('');
+            ADLSECredentials.SetClientSecret('');
+        end;
         ADLSESetup."Schema Exported On" := 0DT;
         ADLSESetup.Workspace := '';
         ADLSESetup.Lakehouse := '';
         ADLSESetup.LandingZone := '';
         ADLSESetup.Container := '';
         ADLSESetup."Account Name" := '';
+        ADLSESetup."S3 Endpoint" := '';
+        ADLSESetup."S3 Region" := '';
+        ADLSESetup."S3 Bucket" := '';
         ADLSESetup.Modify(false);
         ADLSECurrentSession.DeleteAll(true);
     end;

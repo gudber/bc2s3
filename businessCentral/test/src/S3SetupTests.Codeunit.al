@@ -190,6 +190,34 @@ codeunit 85579 "ADLSE S3 Setup Tests"
     end;
 
     [Test]
+    procedure TestCopyToSandbox_ClearsTheS3SettingsAndKeys()
+    var
+        ADLSESetup: Record "ADLSE Setup";
+        ADLSECredentials: Codeunit "ADLSE Credentials";
+        ADLSESetupCodeunit: Codeunit "ADLSE Setup";
+    begin
+        // [SCENARIO] A copy of production made into a sandbox must not export into production's bucket
+        // [GIVEN] A setup exporting to S3, with its access keys
+        Initialize();
+        ADLSELibrarybc2adls.CreateAdlseSetup("Storage Type"::S3);
+        ADLSECredentials.SetClientID('AKIAIOSFODNN7EXAMPLE');
+        ADLSECredentials.SetClientSecret('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
+
+        // [WHEN] The environment is copied into a sandbox
+        ADLSESetupCodeunit.ClearForSandboxCopy();
+
+        // [THEN] The copy has no bucket to export to and no keys to write with
+        ADLSESetup.Get(0);
+        LibraryAssert.AreEqual('', ADLSESetup."S3 Endpoint", 'S3 Endpoint');
+        LibraryAssert.AreEqual('', ADLSESetup."S3 Bucket", 'S3 Bucket');
+        LibraryAssert.AreEqual('', ADLSESetup."S3 Region", 'S3 Region');
+        Clear(ADLSECredentials);
+        ADLSECredentials.Init();
+        LibraryAssert.IsFalse(ADLSECredentials.IsClientIDSet(), 'The access key id should be cleared');
+        LibraryAssert.IsFalse(ADLSECredentials.IsClientSecretSet(), 'The secret access key should be cleared');
+    end;
+
+    [Test]
     procedure TestSetupPage_S3_ShowsS3SettingsOnly()
     var
         ADLSESetupPage: TestPage "ADLSE Setup";
