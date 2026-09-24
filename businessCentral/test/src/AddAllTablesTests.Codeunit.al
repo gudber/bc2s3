@@ -83,6 +83,29 @@ codeunit 85581 "ADLSE Add All Tables Tests"
     end;
 
     [Test]
+    procedure TestAddAllTables_LeavesOutCopiesPersonalizationToolingAndDerivedTables()
+    var
+        ADLSETable: Record "ADLSE Table";
+        ADLSESetup: Codeunit "ADLSE Setup";
+    begin
+        // [SCENARIO] Tables that are not business data are not exported: copies kept for BC's APIs, personal settings,
+        // test and demo tooling, technical metadata, and tables BC derives from others
+        // [GIVEN] An S3 setup exporting nothing yet
+        Initialize();
+
+        // [WHEN] All tables are added
+        ADLSESetup.AddAllTables();
+
+        // [THEN] They are left out, while the documents they copy are exported
+        LibraryAssert.IsFalse(ADLSETable.Get(Database::"Sales Invoice Entity Aggregate"), 'API copy of sales invoices');
+        LibraryAssert.IsFalse(ADLSETable.Get(Database::"My Customer"), 'personal customer list');
+        LibraryAssert.IsFalse(ADLSETable.Get(Database::"Test Input"), 'test tooling');
+        LibraryAssert.IsFalse(ADLSETable.Get(Database::"Tenant Web Service Columns"), 'technical metadata');
+        LibraryAssert.IsFalse(ADLSETable.Get(Database::"Calendar Entry"), 'derived capacity calendar');
+        LibraryAssert.IsTrue(ADLSETable.Get(Database::"Sales Invoice Header"), 'Sales invoices should still be exported');
+    end;
+
+    [Test]
     procedure TestAddAllTables_KeepsTheFieldsChosenForATableAlreadyExported()
     var
         ADLSETable: Record "ADLSE Table";

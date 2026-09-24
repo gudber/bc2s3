@@ -3,11 +3,22 @@
 namespace bc2adls;
 
 using Microsoft.CRM.Outlook;
+using Microsoft.Finance.Dimension;
+using Microsoft.Finance.GeneralLedger.Account;
+using Microsoft.Integration.Entity;
+using Microsoft.Inventory.Costing;
+using Microsoft.Inventory.Item;
+using Microsoft.Manufacturing.Capacity;
+using Microsoft.Purchases.Vendor;
+using Microsoft.RoleCenters;
+using Microsoft.Sales.Customer;
 using Microsoft.EServices.EDocument;
 using Microsoft.Integration.SyncEngine;
 using Microsoft.Utilities;
 using System.Diagnostics;
+using System.Environment;
 using System.Environment.Configuration;
+using System.Integration;
 using System.Reflection;
 using System.Security.Encryption;
 using System.Threading;
@@ -27,8 +38,8 @@ codeunit 82560 "ADLSE Setup"
     /// <summary>
     /// Exports every business table with all the fields that can be exported. Tables already exported keep the
     /// fields chosen for them. Left out: this extension's own tables, which change on every export, BC's system
-    /// tables, the infrastructure tables below, tables the user may not read, and tables that are not normal tables or
-    /// have been removed. Adding tables changes the schema, so the
+    /// tables, the tables below that are not business data, tables the user may not read, and tables that are not normal
+    /// tables or have been removed. Adding tables changes the schema, so the
     /// schema export date is cleared.
     /// </summary>
     procedure AddAllTables()
@@ -49,7 +60,7 @@ codeunit 82560 "ADLSE Setup"
         if AllObj.FindSet() then
             repeat
                 if not ADLSETable.Get(AllObj."Object ID") then
-                    if not IsInfrastructure(AllObj."Object ID") then
+                    if not IsNotBusinessData(AllObj."Object ID") then
                         if TableMetadata.Get(AllObj."Object ID") then
                             if TableMetadata.TableType = TableMetadata.TableType::Normal then
                                 if TableMetadata.ObsoleteState <> TableMetadata.ObsoleteState::Removed then
@@ -98,11 +109,15 @@ codeunit 82560 "ADLSE Setup"
     end;
 
     /// <summary>
-    /// Tables that record how BC runs rather than the business: logs, scheduling, notifications, upgrade bookkeeping,
-    /// integration sync state and stored credentials. Several change constantly, which would also make tracking their
-    /// deletions costly.
+    /// Tables that are not business data, left out when all tables are added:
+    /// - how BC runs: logs, scheduling, notifications, upgrade bookkeeping, integration sync state, stored credentials;
+    ///   several change constantly, which would also make tracking their deletions costly;
+    /// - copies of documents that BC keeps for its APIs (the entity aggregates and buffers);
+    /// - personal settings and role center cues;
+    /// - test and demo data tooling, and technical metadata;
+    /// - tables BC derives from others and can recalculate, such as the capacity calendar.
     /// </summary>
-    local procedure IsInfrastructure(TableId: Integer): Boolean
+    local procedure IsNotBusinessData(TableId: Integer): Boolean
     begin
         exit(TableId in [
             Database::"Change Log Entry", Database::"Change Log Setup", Database::"Change Log Setup (Table)",
@@ -113,9 +128,26 @@ codeunit 82560 "ADLSE Setup"
             Database::"Integration Synch. Job", Database::"Integration Synch. Job Errors",
             Database::"Feature Data Update Status", Database::"Report Inbox",
             Database::"Isolated Certificate", Database::"Office Admin. Credentials",
-            // Internal to the System Application, so named only by number: User Login, Upgrade Tags,
-            // Retention Policy Log Entry, Guided Experience Item.
-            9008, 9999, 3905, 1990]);
+            Database::"Sales Invoice Entity Aggregate", Database::"Purch. Inv. Entity Aggregate",
+            Database::"Sales Order Entity Buffer", Database::"Purchase Order Entity Buffer",
+            Database::"Sales Quote Entity Buffer", Database::"Sales Cr. Memo Entity Buffer",
+            Database::"Purch. Cr. Memo Entity Buffer", Database::"Top Customers By Sales Buffer",
+            Database::"My Customer", Database::"My Vendor", Database::"My Item", Database::"My Account",
+            Database::"My Notifications", Database::"Activities Cue", Database::"Last Used Chart",
+            Database::"O365 Getting Started Page Data", Database::"O365 Device Setup Instructions",
+            Database::"O365 Brand Color", Database::"O365 HTML Template",
+            Database::"Tenant Web Service Columns", Database::"AAD Application", Database::"Hybrid Deployment Setup",
+            Database::"Signup Context Values", Database::"Media Repository",
+            Database::"Calendar Entry", Database::"Avg. Cost Adjmt. Entry Point", Database::"Dimension Set Tree Node",
+            // Internal to the System Application or the Base Application, so named only by number: User Login, Upgrade
+            // Tags, Retention Policy Log Entry, Guided Experience Item, OData Initialized Status, MCP Entra Application,
+            // Cue Setup, Cost Adjmt. Action Message.
+            9008, 9999, 3905, 1990, 1738, 8351, 9701, 5842,
+            // In apps this extension does not depend on: Contoso Coffee Demo Data Setup, Contoso Demo Data Module,
+            // Contoso Module Dependency, E-Service Demo Data Setup (demo data); Shpfy Cue (Shopify); Test Input, Test
+            // Input Group (Test Runner); AIT Test Suite, AIT Test Method Line, AIT Eval Monthly Copilot Cred (AI Test
+            // Toolkit).
+            4768, 5161, 5169, 5296, 30100, 130452, 130454, 149030, 149032, 149040]);
     end;
 
     procedure AddTableToExport()
