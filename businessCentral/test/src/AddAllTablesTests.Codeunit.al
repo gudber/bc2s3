@@ -1,0 +1,133 @@
+// ABOUTME: Tests adding every table to the export: which tables are added, with which fields, and what is left alone.
+// ABOUTME: Business data is exported in full; the extension's own tables and BC's system tables are not.
+codeunit 85581 "ADLSE Add All Tables Tests"
+{
+    Subtype = Test;
+    TestPermissions = Disabled;
+
+    trigger OnRun()
+    begin
+        // [FEATURE] bc2adls add all tables
+    end;
+
+    var
+        ADLSELibrarybc2adls: Codeunit "ADLSE Library - bc2adls";
+        LibraryAssert: Codeunit "Library Assert";
+        "Storage Type": Enum "ADLSE Storage Type";
+        IsInitialized: Boolean;
+
+    [Test]
+    procedure TestAddAllTables_AddsBusinessTablesWithTheirExportableFields()
+    var
+        ADLSETable: Record "ADLSE Table";
+        ADLSEField: Record "ADLSE Field";
+        ADLSESetup: Codeunit "ADLSE Setup";
+        TableId: Integer;
+    begin
+        // [SCENARIO] Adding all tables exports the business tables, each with every field that can be exported
+        // [GIVEN] An S3 setup exporting nothing yet
+        Initialize();
+
+        // [WHEN] All tables are added
+        ADLSESetup.AddAllTables();
+
+        // [THEN] Business tables of the base application are exported, enabled, with fields
+        foreach TableId in BusinessTables() do begin
+            LibraryAssert.IsTrue(ADLSETable.Get(TableId), StrSubstNo('Table %1 should be exported', TableId));
+            LibraryAssert.IsTrue(ADLSETable.Enabled, StrSubstNo('Table %1 should be enabled', TableId));
+            ADLSEField.SetRange("Table ID", TableId);
+            ADLSEField.SetRange(Enabled, true);
+            LibraryAssert.IsFalse(ADLSEField.IsEmpty(), StrSubstNo('Table %1 should have fields', TableId));
+        end;
+    end;
+
+    [Test]
+    procedure TestAddAllTables_LeavesOutTheExtensionsOwnAndSystemTables()
+    var
+        ADLSETable: Record "ADLSE Table";
+        ADLSESetup: Codeunit "ADLSE Setup";
+    begin
+        // [SCENARIO] The extension's own tables change on every export, and system tables hold no business data
+        // [GIVEN] An S3 setup exporting nothing yet
+        Initialize();
+
+        // [WHEN] All tables are added
+        ADLSESetup.AddAllTables();
+
+        // [THEN] Neither the extension's tables nor system tables are exported
+        LibraryAssert.IsFalse(ADLSETable.Get(Database::"ADLSE Table"), 'The extension''s own table should not be exported');
+        LibraryAssert.IsFalse(ADLSETable.Get(Database::"ADLSE Run"), 'The extension''s run log should not be exported');
+        LibraryAssert.IsFalse(ADLSETable.Get(Database::Company), 'System tables should not be exported');
+    end;
+
+    [Test]
+    procedure TestAddAllTables_KeepsTheFieldsChosenForATableAlreadyExported()
+    var
+        ADLSETable: Record "ADLSE Table";
+        ADLSEField: Record "ADLSE Field";
+        ADLSESetup: Codeunit "ADLSE Setup";
+        FieldsBefore: Integer;
+    begin
+        // [SCENARIO] A table already exported keeps the fields chosen for it
+        // [GIVEN] Payment Terms exported with only its primary key
+        Initialize();
+        ADLSETable.Add(Database::"Payment Terms");
+        ADLSEField.SetRange("Table ID", Database::"Payment Terms");
+        ADLSEField.SetRange(Enabled, true);
+        FieldsBefore := ADLSEField.Count();
+
+        // [WHEN] All tables are added
+        ADLSESetup.AddAllTables();
+
+        // [THEN] Payment Terms still exports the same fields
+        LibraryAssert.AreEqual(FieldsBefore, ADLSEField.Count(), 'The fields chosen for Payment Terms should be kept');
+    end;
+
+    [Test]
+    procedure TestAddAllTables_ClearsTheSchemaExportDate()
+    var
+        ADLSESetupRecord: Record "ADLSE Setup";
+        ADLSESetup: Codeunit "ADLSE Setup";
+    begin
+        // [SCENARIO] Adding tables changes the schema, so it has to be exported again
+        // [GIVEN] A setup whose schema was exported
+        Initialize();
+        ADLSESetupRecord.Get(0);
+        ADLSESetupRecord."Schema Exported On" := CurrentDateTime();
+        ADLSESetupRecord.Modify();
+
+        // [WHEN] All tables are added
+        ADLSESetup.AddAllTables();
+
+        // [THEN] The schema export date is cleared
+        ADLSESetupRecord.Get(0);
+        LibraryAssert.AreEqual(0DT, ADLSESetupRecord."Schema Exported On", 'Schema exported on');
+    end;
+
+    local procedure BusinessTables() Tables: List of [Integer]
+    begin
+        Tables.Add(Database::"Payment Terms");
+        Tables.Add(Database::Customer);
+        Tables.Add(Database::"G/L Entry");
+        Tables.Add(Database::"Sales Header");
+    end;
+
+    local procedure Initialize()
+    var
+        LibraryTestInitialize: Codeunit "Library - Test Initialize";
+    begin
+        LibraryTestInitialize.OnTestInitialize(Codeunit::"ADLSE Add All Tables Tests");
+        ADLSELibrarybc2adls.CleanUp();
+        ADLSELibrarybc2adls.CreateAdlseSetup("Storage Type"::S3);
+
+        if IsInitialized then
+            exit;
+
+        LibraryTestInitialize.OnBeforeTestSuiteInitialize(Codeunit::"ADLSE Add All Tables Tests");
+
+        IsInitialized := true;
+        Commit();
+
+        LibraryTestInitialize.OnAfterTestSuiteInitialize(Codeunit::"ADLSE Add All Tables Tests");
+    end;
+}

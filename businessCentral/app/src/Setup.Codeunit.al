@@ -14,6 +14,41 @@ codeunit 82560 "ADLSE Setup"
         FieldObsoleteNotSupportedErr: Label 'The field %1 is obsolete', Comment = '%1 = field name';
         FieldDisabledNotSupportedErr: Label 'The field %1 is disabled', Comment = '%1 = field name';
 
+    /// <summary>
+    /// Exports every business table with all the fields that can be exported. Tables already exported keep the
+    /// fields chosen for them. Left out: this extension's own tables, which change on every export, BC's system
+    /// tables, and tables that are not normal tables or have been removed. Adding tables changes the schema, so the
+    /// schema export date is cleared.
+    /// </summary>
+    procedure AddAllTables()
+    var
+        ADLSETable: Record "ADLSE Table";
+        AllObj: Record AllObj;
+        TableMetadata: Record "Table Metadata";
+        ADLSEExecution: Codeunit "ADLSE Execution";
+        ThisExtension: ModuleInfo;
+    begin
+        NavApp.GetCurrentModuleInfo(ThisExtension);
+        ADLSEExecution.ClearSchemaExportedOn();
+
+        AllObj.SetRange("Object Type", AllObj."Object Type"::Table);
+        AllObj.SetFilter("Object ID", '<%1', 2000000000); // BC's system tables start at 2000000000
+        AllObj.SetFilter("App Package ID", '<>%1', ThisExtension.PackageId);
+        if AllObj.FindSet() then
+            repeat
+                if not ADLSETable.Get(AllObj."Object ID") then
+                    if TableMetadata.Get(AllObj."Object ID") then
+                        if TableMetadata.TableType = TableMetadata.TableType::Normal then
+                            if TableMetadata.ObsoleteState <> TableMetadata.ObsoleteState::Removed then begin
+                                ADLSETable.Init();
+                                ADLSETable."Table ID" := AllObj."Object ID";
+                                ADLSETable.Enabled := true;
+                                ADLSETable.Insert(true);
+                                ADLSETable.AddAllFields();
+                            end;
+            until AllObj.Next() = 0;
+    end;
+
     procedure AddTableToExport()
     var
         AllObjWithCaption: Record AllObjWithCaption;

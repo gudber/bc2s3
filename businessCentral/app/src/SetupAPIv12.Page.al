@@ -89,6 +89,15 @@ page 82572 "ADLSE Setup API v12"
     end;
 
     [ServiceEnabled]
+    procedure AddAllTables(var ActionContext: WebServiceActionContext)
+    var
+        ADLSESetup: Codeunit "ADLSE Setup";
+    begin
+        ADLSESetup.AddAllTables();
+        SetActionResponse(ActionContext, Rec."SystemId");
+    end;
+
+    [ServiceEnabled]
     procedure ClearSchemaExportedOn(var ActionContext: WebServiceActionContext)
     var
         ADLSEExecution: Codeunit "ADLSE Execution";
