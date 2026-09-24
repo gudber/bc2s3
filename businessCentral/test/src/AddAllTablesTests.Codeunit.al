@@ -61,6 +61,28 @@ codeunit 85581 "ADLSE Add All Tables Tests"
     end;
 
     [Test]
+    procedure TestAddAllTables_LeavesOutLogsSchedulingAndOtherInfrastructure()
+    var
+        ADLSETable: Record "ADLSE Table";
+        ADLSESetup: Codeunit "ADLSE Setup";
+    begin
+        // [SCENARIO] Tables that record how BC runs rather than the business are not exported
+        // [GIVEN] An S3 setup exporting nothing yet
+        Initialize();
+
+        // [WHEN] All tables are added
+        ADLSESetup.AddAllTables();
+
+        // [THEN] Logs, scheduling and stored credentials are left out
+        LibraryAssert.IsFalse(ADLSETable.Get(Database::"Change Log Entry"), 'The change log should not be exported');
+        LibraryAssert.IsFalse(ADLSETable.Get(Database::"Job Queue Entry"), 'The job queue should not be exported');
+        LibraryAssert.IsFalse(ADLSETable.Get(Database::"Job Queue Log Entry"), 'The job queue log should not be exported');
+        LibraryAssert.IsFalse(ADLSETable.Get(Database::"Activity Log"), 'The activity log should not be exported');
+        LibraryAssert.IsFalse(ADLSETable.Get(Database::"Isolated Certificate"), 'Stored certificates should not be exported');
+        LibraryAssert.IsTrue(ADLSETable.Get(Database::Customer), 'Customers should still be exported');
+    end;
+
+    [Test]
     procedure TestAddAllTables_KeepsTheFieldsChosenForATableAlreadyExported()
     var
         ADLSETable: Record "ADLSE Table";

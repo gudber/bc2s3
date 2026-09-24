@@ -2,7 +2,15 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 namespace bc2adls;
 
+using Microsoft.CRM.Outlook;
+using Microsoft.EServices.EDocument;
+using Microsoft.Integration.SyncEngine;
+using Microsoft.Utilities;
+using System.Diagnostics;
+using System.Environment.Configuration;
 using System.Reflection;
+using System.Security.Encryption;
+using System.Threading;
 using System.Utilities;
 codeunit 82560 "ADLSE Setup"
 {
@@ -17,7 +25,7 @@ codeunit 82560 "ADLSE Setup"
     /// <summary>
     /// Exports every business table with all the fields that can be exported. Tables already exported keep the
     /// fields chosen for them. Left out: this extension's own tables, which change on every export, BC's system
-    /// tables, and tables that are not normal tables or have been removed. Adding tables changes the schema, so the
+    /// tables, the infrastructure tables below, and tables that are not normal tables or have been removed. Adding tables changes the schema, so the
     /// schema export date is cleared.
     /// </summary>
     procedure AddAllTables()
@@ -37,16 +45,38 @@ codeunit 82560 "ADLSE Setup"
         if AllObj.FindSet() then
             repeat
                 if not ADLSETable.Get(AllObj."Object ID") then
-                    if TableMetadata.Get(AllObj."Object ID") then
-                        if TableMetadata.TableType = TableMetadata.TableType::Normal then
-                            if TableMetadata.ObsoleteState <> TableMetadata.ObsoleteState::Removed then begin
-                                ADLSETable.Init();
-                                ADLSETable."Table ID" := AllObj."Object ID";
-                                ADLSETable.Enabled := true;
-                                ADLSETable.Insert(true);
-                                ADLSETable.AddAllFields();
-                            end;
+                    if not IsInfrastructure(AllObj."Object ID") then
+                        if TableMetadata.Get(AllObj."Object ID") then
+                            if TableMetadata.TableType = TableMetadata.TableType::Normal then
+                                if TableMetadata.ObsoleteState <> TableMetadata.ObsoleteState::Removed then begin
+                                    ADLSETable.Init();
+                                    ADLSETable."Table ID" := AllObj."Object ID";
+                                    ADLSETable.Enabled := true;
+                                    ADLSETable.Insert(true);
+                                    ADLSETable.AddAllFields();
+                                end;
             until AllObj.Next() = 0;
+    end;
+
+    /// <summary>
+    /// Tables that record how BC runs rather than the business: logs, scheduling, notifications, upgrade bookkeeping,
+    /// integration sync state and stored credentials. Several change constantly, which would also make tracking their
+    /// deletions costly.
+    /// </summary>
+    local procedure IsInfrastructure(TableId: Integer): Boolean
+    begin
+        exit(TableId in [
+            Database::"Change Log Entry", Database::"Change Log Setup", Database::"Change Log Setup (Table)",
+            Database::"Change Log Setup (Field)",
+            Database::"Job Queue Entry", Database::"Job Queue Log Entry", Database::"Job Queue Category",
+            Database::"Activity Log", Database::"Error Message", Database::"Error Message Register",
+            Database::"Notification Entry", Database::"Sent Notification Entry",
+            Database::"Integration Synch. Job", Database::"Integration Synch. Job Errors",
+            Database::"Feature Data Update Status", Database::"Report Inbox",
+            Database::"Isolated Certificate", Database::"Office Admin. Credentials",
+            // Internal to the System Application, so named only by number: User Login, Upgrade Tags,
+            // Retention Policy Log Entry, Guided Experience Item.
+            9008, 9999, 3905, 1990]);
     end;
 
     procedure AddTableToExport()
