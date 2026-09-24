@@ -21,6 +21,8 @@ codeunit 82562 "ADLSE Communication"
         HighestDeletedEntryNoOnPayload: BigInteger;
         CombineUpsertsAndDeletes: Boolean;
         NumberOfFlushes: Integer;
+        RecordsOnPayload: Integer;
+        ObjectsWritten: Integer;
         EntityName: Text;
         EntityJson: JsonObject;
         DefaultContainerName: Text;
@@ -326,12 +328,21 @@ codeunit 82562 "ADLSE Communication"
             LastTimestampExported := LastFlushedTimeStamp;
 
         Payload.Append(RecordPayLoad);
+        RecordsOnPayload += 1;
         if CombineUpsertsAndDeletes and Deletes then begin
             if RecordTimeStamp > HighestDeletedEntryNoOnPayload then
                 HighestDeletedEntryNoOnPayload := RecordTimeStamp;
         end else
             if RecordTimeStamp > HighestTimeStampOnPayload then
                 HighestTimeStampOnPayload := RecordTimeStamp;
+    end;
+
+    /// <summary>
+    /// How many objects this export put in S3-compatible storage.
+    /// </summary>
+    procedure GetObjectsWritten(): Integer
+    begin
+        exit(ObjectsWritten);
     end;
 
     [TryFunction]
@@ -395,6 +406,7 @@ codeunit 82562 "ADLSE Communication"
         ADLSEExecution: Codeunit "ADLSE Execution";
         ADLSEUtil: Codeunit "ADLSE Util";
         ADLSE: Codeunit ADLSE;
+        ADLSEMonitor: Codeunit "ADLSE Monitor";
         CustomDimensions: Dictionary of [Text, Text];
         BlockID: Text;
     begin
@@ -436,6 +448,8 @@ codeunit 82562 "ADLSE Communication"
                 begin
                     DataBlobPath := StrSubstNo(S3DeltaObjectTok, EntityName, ADLSES3Util.ObjectTimestamp(CurrentDateTime()), ADLSEUtil.ToText(CreateGuid()));
                     ADLSES3Util.PutObject(GetBaseUrl() + DataBlobPath, Payload.ToText(), CsvContentTypeTok);
+                    ObjectsWritten += 1;
+                    ADLSEMonitor.ReportObjectWritten(TableID, DataBlobPath, Payload.Length(), RecordsOnPayload);
                 end;
         end;
 
@@ -449,6 +463,7 @@ codeunit 82562 "ADLSE Communication"
         end else
             LastFlushedTimeStamp := HighestTimeStampOnPayload;
         Payload.Clear();
+        RecordsOnPayload := 0;
         HighestTimeStampOnPayload := 0;
         HighestDeletedEntryNoOnPayload := 0;
         NumberOfFlushes += 1;

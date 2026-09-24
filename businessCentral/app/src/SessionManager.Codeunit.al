@@ -34,6 +34,7 @@ codeunit 82570 "ADLSE Session Manager"
         ADLSESetup: Record "ADLSE Setup";
         ADLSEExecution: Codeunit "ADLSE Execution";
         ADLSEUtil: Codeunit "ADLSE Util";
+        ADLSEMonitor: Codeunit "ADLSE Monitor";
         CustomDimensions: Dictionary of [Text, Text];
         NewSessionID: Integer;
     begin
@@ -59,6 +60,7 @@ codeunit 82570 "ADLSE Session Manager"
             end else begin
                 if EmitTelemetry then
                     ADLSEExecution.Log('ADLSE-025', 'Session.StartSession() failed', Verbosity::Warning, CustomDimensions);
+                ADLSEMonitor.ReportSessionNotStarted(TableID);
 
                 if not ExportWasPending then
                     PushToPendingTables(TableID);

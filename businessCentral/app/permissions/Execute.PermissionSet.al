@@ -40,6 +40,7 @@ permissionset 82561 "ADLSE - Execute"
                   codeunit "ADLSE S3 Util" = X,
                   codeunit "ADLSE S3 Signer" = X,
                   codeunit "ADLSE Monitor" = X,
+                  codeunit "ADLSE Scheduled Export" = X,
                   codeunit "ADLSE Execute" = X,
                   codeunit "ADLSE Execution" = X,
                   codeunit "ADLSE Wrapper Execute" = X,

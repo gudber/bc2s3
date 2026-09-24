@@ -60,6 +60,11 @@ codeunit 82561 "ADLSE Execute"
         OldUpdatedLastTimestamp := UpdatedLastTimestamp;
         OldDeletedLastEntryNo := DeletedLastEntryNo;
         ExportSuccess := TryExportTableData(Rec."Table ID", ADLSECommunication, UpdatedLastTimestamp, DeletedLastEntryNo, EntityJsonNeedsUpdate, ManifestJsonsNeedsUpdate);
+        RunDetails.Add('objects_written', ADLSECommunication.GetObjectsWritten() + ADLSECommunicationDeletions.GetObjectsWritten());
+        RunDetails.Add('timestamp_before', OldUpdatedLastTimestamp);
+        RunDetails.Add('timestamp_after', UpdatedLastTimestamp);
+        RunDetails.Add('deleted_entry_before', OldDeletedLastEntryNo);
+        RunDetails.Add('deleted_entry_after', DeletedLastEntryNo);
         if not ExportSuccess then
             ADLSERun.RegisterErrorInProcess(Rec."Table ID", EmitTelemetry, TableCaption);
 
@@ -107,7 +112,11 @@ codeunit 82561 "ADLSE Execute"
         ExportWindow: Record "ADLSE Setup";
         StopsAtWindowEnd: Boolean;
         StoppedAtWindowEnd: Boolean;
-        RecordsSent: Integer;
+        RecordsUpdated: Integer;
+        RecordsDeleted: Integer;
+        RecordsDelayed: Integer;
+        RunDetails: JsonObject;
+        ADLSECommunicationDeletions: Codeunit "ADLSE Communication";
 
     [TryFunction]
     local procedure TryExportTableData(TableID: Integer; var ADLSECommunication: Codeunit "ADLSE Communication";
@@ -115,7 +124,6 @@ codeunit 82561 "ADLSE Execute"
         var EntityJsonNeedsUpdate: Boolean; var ManifestJsonsNeedsUpdate: Boolean)
     var
         ADLSESetup: Record "ADLSE Setup";
-        ADLSECommunicationDeletions: Codeunit "ADLSE Communication";
         FieldIdList: List of [Integer];
         DidUpserts: Boolean;
         DidDeletes: Boolean;
@@ -276,16 +284,18 @@ codeunit 82561 "ADLSE Execute"
 
                     CollectedAndSent := ADLSECommunication.TryCollectAndSendRecord(RecordRef, TimeStampFieldRef.Value(), FlushedTimeStamp, false);
                     if CollectedAndSent then begin
-                        RecordsSent += 1;
+                        RecordsUpdated += 1;
                         if UpdatedLastTimeStamp < FlushedTimeStamp then // sample the highest timestamp, to cater to the eventuality that the records do not appear sorted per timestamp
                             UpdatedLastTimeStamp := FlushedTimeStamp;
                     end else
                         ErrorMessage.Message := StrSubstNo('%1%2', GetLastErrorText(), GetLastErrorCallStack());
-                end else
+                end else begin
+                    RecordsDelayed += 1;
                     if EmitTelemetry then begin
                         CustomDimensions.Set('Record Time Stamp', Format(RecordModifiedAt));
                         ADLSEExecution.Log('ADLSE-023', 'Skipping record in delay window', Verbosity::Normal, CustomDimensions);
                     end;
+                end;
 
                 if CollectedAndSent then
                     NoMoreToCollect := RecordRef.Next() = 0;
@@ -373,10 +383,11 @@ codeunit 82561 "ADLSE Execute"
                         ADLSEUtil.CreateFakeRecordForDeletedAction(ADLSEDeletedRecord, RecordRef);
                         if ADLSECommunication.TryCollectAndSendRecord(RecordRef, ADLSEDeletedRecord."Entry No.", FlushedTimeStamp, true) then begin
                             DeletedLastEntryNo := FlushedTimeStamp;
-                            RecordsSent += 1;
+                            RecordsDeleted += 1;
                         end else
                             ErrorMessage.Message := StrSubstNo('%1%2', GetLastErrorText(), GetLastErrorCallStack());
-                    end;
+                    end else
+                        RecordsDelayed += 1;
                 until ADLSEDeletedRecord.Next() = 0;
 
             if DoFinish then
@@ -434,6 +445,7 @@ codeunit 82561 "ADLSE Execute"
         ADLSEExternalEvents: Codeunit "ADLSE External Events";
         ADLSEMonitor: Codeunit "ADLSE Monitor";
         CustomDimensions: Dictionary of [Text, Text];
+        Details: JsonObject;
     begin
         ADLSERun.RegisterEnded(ADLSETable."Table ID", EmitTelemetry, TableCaption);
         ADLSECurrentSession.Stop(ADLSETable."Table ID", EmitTelemetry, TableCaption);
@@ -442,7 +454,13 @@ codeunit 82561 "ADLSE Execute"
             ADLSEExecution.Log('ADLSE-037', 'Finished the export process', Verbosity::Normal, CustomDimensions);
         end;
         Commit(); //To avoid misreading
-        ADLSEMonitor.ReportTableExported(ADLSETable."Table ID", RecordsSent);
+        Details := RunDetails.Clone().AsObject();
+        Details.Add('records', RecordsUpdated + RecordsDeleted);
+        Details.Add('records_updated', RecordsUpdated);
+        Details.Add('records_deleted', RecordsDeleted);
+        Details.Add('records_delayed', RecordsDelayed);
+        Details.Add('stopped_at_window_end', StoppedAtWindowEnd);
+        ADLSEMonitor.ReportTableExported(ADLSETable."Table ID", Details);
 
         // This export session is soon going to end. Start up a new one from 
         // the stored list of pending tables to export.

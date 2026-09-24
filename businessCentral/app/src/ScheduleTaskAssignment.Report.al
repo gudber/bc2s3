@@ -15,13 +15,21 @@ report 82561 "ADLSE Schedule Task Assignment"
             trigger OnPreDataItem()
             var
                 ADLSESetup: Record "ADLSE Setup";
-                ADLSEExecution: Codeunit "ADLSE Execution";
+                ADLSEMonitor: Codeunit "ADLSE Monitor";
+                ErrorText: Text;
             begin
                 // Scheduled exports run only within the export window; exports started by hand run at any time.
                 ADLSESetup.GetSingleton();
-                if not ADLSESetup.IsWithinExportWindow(DT2Time(CurrentDateTime())) then
+                if not ADLSESetup.IsWithinExportWindow(DT2Time(CurrentDateTime())) then begin
+                    ADLSEMonitor.ReportExportSkipped(ADLSESetup);
                     CurrReport.Break();
-                ADLSEExecution.StartExport(ADLSETable);
+                end;
+                Commit(); // Codeunit.Run cannot catch an error inside a write transaction.
+                if not Codeunit.Run(Codeunit::"ADLSE Scheduled Export", ADLSETable) then begin
+                    ErrorText := GetLastErrorText();
+                    ADLSEMonitor.ReportExportFailed(ErrorText, GetLastErrorCallStack());
+                    Error('%1', ErrorText);
+                end;
             end;
         }
     }

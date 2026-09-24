@@ -45,6 +45,7 @@ codeunit 82569 "ADLSE Execution"
         ADLSEExternalEvents: Codeunit "ADLSE External Events";
         ADLSEUtil: Codeunit "ADLSE Util";
         ADLSEMonitor: Codeunit "ADLSE Monitor";
+        TablesUnreadable: TextBuilder;
         Counter: Integer;
         Started: Integer;
         HasSyncCompanyRecord: Boolean;
@@ -78,9 +79,13 @@ codeunit 82569 "ADLSE Execution"
                     if ADLSEUtil.CanReadTable(ADLSETable."Table ID") then begin
                         if ADLSESessionManager.StartExport(ADLSETable."Table ID", EmitTelemetry) then
                             Started += 1;
-                    end else
+                    end else begin
+                        if TablesUnreadable.Length() > 0 then
+                            TablesUnreadable.Append(',');
+                        TablesUnreadable.Append(Format(ADLSETable."Table ID"));
                         if EmitTelemetry then
                             Log('ADLSE-042', StrSubstNo(TableNotReadableTxt, ADLSETable."Table ID"), Verbosity::Warning);
+                    end;
             until ADLSETable.Next() = 0;
 
         if HasSyncCompanyRecord then begin
@@ -88,7 +93,7 @@ codeunit 82569 "ADLSE Execution"
             ADLSECurrentSession.Stop(Database::"ADLSE Sync Companies", EmitTelemetry, ADLSEUtil.GetTableCaption(Database::"ADLSE Sync Companies"));
         end;
 
-        ADLSEMonitor.ReportExportStarted(Started, Counter);
+        ADLSEMonitor.ReportExportStarted(Started, Counter, TablesUnreadable.ToText());
         Message(ExportStartedTxt, Started, Counter);
         if EmitTelemetry then
             Log('ADLSE-001', StrSubstNo(ExportStartedTxt, Started, Counter), Verbosity::Normal);

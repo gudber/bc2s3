@@ -24,6 +24,7 @@ codeunit 85580 "ADLSE S3 Export Tests"
         DeltasPrefixTok: Label 'https://fsn1.your-objectstorage.com/bc2adls/deltas/ReasonCode-231/', Locked = true;
         MonitoringUrlTok: Label 'https://eu1-api.openobserve.ai/api/test-org/bc_export/_json', Locked = true;
         MonitoringStatus: Integer;
+        PutStatus: Integer;
 
     [Test]
     [HandlerFunctions('S3Handler')]
@@ -147,12 +148,12 @@ codeunit 85580 "ADLSE S3 Export Tests"
     [HandlerFunctions('S3Handler')]
     procedure TestExport_ReportsTheTablesRunToTheMonitoringUrl()
     var
+        ADLSERun: Record "ADLSE Run";
         ADLSEExecute: Codeunit "ADLSE Execute";
         ADLSEMonitorRecorder: Codeunit "ADLSE Monitor Recorder";
         Reported: JsonObject;
-        Token: JsonToken;
     begin
-        // [SCENARIO] Each table's export is reported to the monitoring URL: which table, how it went, how many records
+        // [SCENARIO] Each table's export is reported to the monitoring URL: which table, how it went, what was sent
         // [GIVEN] Three reason codes exported to S3, with a monitoring URL
         Initialize();
         SetUpReasonCodeExportToS3();
@@ -163,20 +164,137 @@ codeunit 85580 "ADLSE S3 Export Tests"
         ADLSEExecute.Run(ADLSETable);
         UnbindSubscription(ADLSEMonitorRecorder);
 
-        // [THEN] One event was posted to the monitoring URL, saying the table was exported with its three records
+        // [THEN] The run was posted to the monitoring URL with its table, outcome, records and progress
         LibraryAssert.IsTrue(Requests.Contains('POST ' + MonitoringUrlTok), 'The run should be reported to the monitoring URL');
-        LibraryAssert.AreEqual(1, ADLSEMonitorRecorder.Reported().Count(), 'reported events');
-        Reported.ReadFrom(ADLSEMonitorRecorder.Reported().Get(1));
-        Reported.Get('event', Token);
-        LibraryAssert.AreEqual('table_exported', Token.AsValue().AsText(), 'event');
-        Reported.Get('table_id', Token);
-        LibraryAssert.AreEqual(Database::"Reason Code", Token.AsValue().AsInteger(), 'table_id');
-        Reported.Get('state', Token);
-        LibraryAssert.AreEqual('Success', Token.AsValue().AsText(), 'state');
-        Reported.Get('records', Token);
-        LibraryAssert.AreEqual(3, Token.AsValue().AsInteger(), 'records');
-        Reported.Get('company', Token);
-        LibraryAssert.AreEqual(CompanyName(), Token.AsValue().AsText(), 'company');
+        Reported := ADLSEMonitorRecorder.Single('table_exported');
+        ADLSERun.SetRange("Table ID", Database::"Reason Code");
+        ADLSERun.FindLast();
+        LibraryAssert.AreEqual(Database::"Reason Code", ADLSEMonitorRecorder.Value(Reported, 'table_id').AsInteger(), 'table_id');
+        LibraryAssert.AreEqual('Reason Code', ADLSEMonitorRecorder.Value(Reported, 'table_caption').AsText(), 'table_caption');
+        LibraryAssert.AreEqual('Success', ADLSEMonitorRecorder.Value(Reported, 'state').AsText(), 'state');
+        LibraryAssert.AreEqual(ADLSERun.ID, ADLSEMonitorRecorder.Value(Reported, 'run_id').AsInteger(), 'run_id');
+        LibraryAssert.AreEqual(3, ADLSEMonitorRecorder.Value(Reported, 'records').AsInteger(), 'records');
+        LibraryAssert.AreEqual(3, ADLSEMonitorRecorder.Value(Reported, 'records_updated').AsInteger(), 'records_updated');
+        LibraryAssert.AreEqual(0, ADLSEMonitorRecorder.Value(Reported, 'records_deleted').AsInteger(), 'records_deleted');
+        LibraryAssert.AreEqual(0, ADLSEMonitorRecorder.Value(Reported, 'records_delayed').AsInteger(), 'records_delayed');
+        LibraryAssert.AreEqual(1, ADLSEMonitorRecorder.Value(Reported, 'objects_written').AsInteger(), 'objects_written');
+        LibraryAssert.AreEqual(0, ADLSEMonitorRecorder.Value(Reported, 'timestamp_before').AsBigInteger(), 'timestamp_before');
+        LibraryAssert.IsTrue(ADLSEMonitorRecorder.Value(Reported, 'timestamp_after').AsBigInteger() > 0, 'timestamp_after');
+        LibraryAssert.IsFalse(ADLSEMonitorRecorder.Value(Reported, 'stopped_at_window_end').AsBoolean(), 'stopped_at_window_end');
+        LibraryAssert.AreEqual('', ADLSEMonitorRecorder.Value(Reported, 'error').AsText(), 'error');
+        AssertDescribesThisSession(ADLSEMonitorRecorder, Reported);
+    end;
+
+    [Test]
+    [HandlerFunctions('S3Handler')]
+    procedure TestExport_ReportsEachObjectWritten()
+    var
+        ADLSEExecute: Codeunit "ADLSE Execute";
+        ADLSEMonitorRecorder: Codeunit "ADLSE Monitor Recorder";
+        Reported: JsonObject;
+    begin
+        // [SCENARIO] Each object put in the bucket is reported, so a delta in the bucket can be traced to its export
+        // [GIVEN] Three reason codes exported to S3, with a monitoring URL
+        Initialize();
+        SetUpReasonCodeExportToS3();
+        SetMonitoring(200);
+
+        // [WHEN] The table is exported
+        BindSubscription(ADLSEMonitorRecorder);
+        ADLSEExecute.Run(ADLSETable);
+        UnbindSubscription(ADLSEMonitorRecorder);
+
+        // [THEN] The one delta object is reported with its path in the bucket, its length and its records
+        Reported := ADLSEMonitorRecorder.Single('object_written');
+        LibraryAssert.AreEqual(SinglePutUnder(DeltasPrefixTok), 'https://fsn1.your-objectstorage.com/bc2adls' + ADLSEMonitorRecorder.Value(Reported, 'path').AsText(), 'path');
+        LibraryAssert.AreEqual(Database::"Reason Code", ADLSEMonitorRecorder.Value(Reported, 'table_id').AsInteger(), 'table_id');
+        LibraryAssert.AreEqual(3, ADLSEMonitorRecorder.Value(Reported, 'records').AsInteger(), 'records');
+        LibraryAssert.IsTrue(ADLSEMonitorRecorder.Value(Reported, 'characters').AsInteger() > 0, 'characters');
+    end;
+
+    [Test]
+    [HandlerFunctions('S3Handler')]
+    procedure TestExport_ReportsDeletedRecords()
+    var
+        ReasonCode: Record "Reason Code";
+        ADLSEExecute: Codeunit "ADLSE Execute";
+        ADLSEMonitorRecorder: Codeunit "ADLSE Monitor Recorder";
+        Reported: JsonObject;
+    begin
+        // [SCENARIO] Deletes are counted apart from updates
+        // [GIVEN] Three reason codes exported to S3, then one of them deleted
+        Initialize();
+        SetUpReasonCodeExportToS3();
+        SetMonitoring(200);
+        ADLSEExecute.Run(ADLSETable);
+        ReasonCode.FindFirst();
+        ReasonCode.Delete(true);
+
+        // [WHEN] The table is exported again
+        BindSubscription(ADLSEMonitorRecorder);
+        ADLSEExecute.Run(ADLSETable);
+        UnbindSubscription(ADLSEMonitorRecorder);
+
+        // [THEN] The run reports one deleted record and no updates
+        Reported := ADLSEMonitorRecorder.Single('table_exported');
+        LibraryAssert.AreEqual(0, ADLSEMonitorRecorder.Value(Reported, 'records_updated').AsInteger(), 'records_updated');
+        LibraryAssert.AreEqual(1, ADLSEMonitorRecorder.Value(Reported, 'records_deleted').AsInteger(), 'records_deleted');
+        LibraryAssert.IsTrue(ADLSEMonitorRecorder.Value(Reported, 'deleted_entry_after').AsBigInteger() > 0, 'deleted_entry_after');
+    end;
+
+    [Test]
+    [HandlerFunctions('S3Handler')]
+    procedure TestExport_ReportsTheErrorOfAFailedRun()
+    var
+        ADLSEExecute: Codeunit "ADLSE Execute";
+        ADLSEMonitorRecorder: Codeunit "ADLSE Monitor Recorder";
+        Reported: JsonObject;
+    begin
+        // [SCENARIO] A failed run is reported with the storage's answer, so it can be diagnosed from the monitoring
+        // [GIVEN] Reason codes exported to S3, where the bucket refuses the put
+        Initialize();
+        SetUpReasonCodeExportToS3();
+        SetMonitoring(200);
+        PutStatus := 403;
+
+        // [WHEN] The table is exported
+        BindSubscription(ADLSEMonitorRecorder);
+        ADLSEExecute.Run(ADLSETable);
+        UnbindSubscription(ADLSEMonitorRecorder);
+
+        // [THEN] The run is reported failed, with the status S3 answered
+        Reported := ADLSEMonitorRecorder.Single('table_exported');
+        LibraryAssert.AreEqual('Failed', ADLSEMonitorRecorder.Value(Reported, 'state').AsText(), 'state');
+        LibraryAssert.IsTrue(ADLSEMonitorRecorder.Value(Reported, 'error').AsText().Contains('403'), 'error: ' + ADLSEMonitorRecorder.Value(Reported, 'error').AsText());
+    end;
+
+    [Test]
+    [HandlerFunctions('S3Handler')]
+    procedure TestExport_ReportsASessionThatCouldNotExport()
+    var
+        ADLSECurrentSession: Record "ADLSE Current Session";
+        ADLSEWrapperExecute: Codeunit "ADLSE Wrapper Execute";
+        ADLSEMonitorRecorder: Codeunit "ADLSE Monitor Recorder";
+        Reported: JsonObject;
+    begin
+        // [SCENARIO] An export session that fails before it can register its run is still reported, with its error
+        // [GIVEN] Reason codes exported to S3, while this session already holds the table's export
+        Initialize();
+        SetUpReasonCodeExportToS3();
+        SetMonitoring(200);
+        ADLSECurrentSession.Start(Database::"Reason Code");
+        Commit();
+
+        // [WHEN] An export session runs for the table
+        BindSubscription(ADLSEMonitorRecorder);
+        ADLSEWrapperExecute.Run(ADLSETable);
+        UnbindSubscription(ADLSEMonitorRecorder);
+
+        // [THEN] It reported that it failed, and why
+        Reported := ADLSEMonitorRecorder.Single('table_session_failed');
+        LibraryAssert.AreEqual(Database::"Reason Code", ADLSEMonitorRecorder.Value(Reported, 'table_id').AsInteger(), 'table_id');
+        LibraryAssert.AreNotEqual('', ADLSEMonitorRecorder.Value(Reported, 'error').AsText(), 'error');
+        LibraryAssert.AreNotEqual('', ADLSEMonitorRecorder.Value(Reported, 'call_stack').AsText(), 'call_stack');
     end;
 
     [Test]
@@ -226,37 +344,118 @@ codeunit 85580 "ADLSE S3 Export Tests"
     [HandlerFunctions('S3Handler,ExportStartedMessageHandler')]
     procedure TestStartExport_ReportsThatTheExportStarted()
     var
+        ADLSESetup: Record "ADLSE Setup";
         ADLSEExecution: Codeunit "ADLSE Execution";
         ADLSEMonitorRecorder: Codeunit "ADLSE Monitor Recorder";
         Reported: JsonObject;
-        Token: JsonToken;
     begin
-        // [SCENARIO] Every export reports that it started, even when no table has changes, so a stopped schedule shows
-        // [GIVEN] An S3 export with a monitoring URL and no tables
+        // [SCENARIO] Every export reports that it started and with which settings, even when no table has changes
+        // [GIVEN] An S3 export with a monitoring URL, an export window and no tables
         Initialize();
         SetUpReasonCodeExportToS3();
         ADLSETable.Delete(true);
         SetMonitoring(200);
+        ADLSESetup.Get(0);
+        ADLSESetup."Export Window Start" := 000000T;
+        ADLSESetup."Export Window End" := 235959T;
+        ADLSESetup."Delayed Export" := 900;
+        ADLSESetup.Modify();
 
         // [WHEN] The export starts
         BindSubscription(ADLSEMonitorRecorder);
         ADLSEExecution.StartExport();
         UnbindSubscription(ADLSEMonitorRecorder);
 
-        // [THEN] It reported that it started no tables of none enabled
-        LibraryAssert.AreEqual(1, ADLSEMonitorRecorder.Reported().Count(), 'reported events');
-        Reported.ReadFrom(ADLSEMonitorRecorder.Reported().Get(1));
-        Reported.Get('event', Token);
-        LibraryAssert.AreEqual('export_started', Token.AsValue().AsText(), 'event');
-        Reported.Get('tables_started', Token);
-        LibraryAssert.AreEqual(0, Token.AsValue().AsInteger(), 'tables_started');
-        Reported.Get('tables_enabled', Token);
-        LibraryAssert.AreEqual(0, Token.AsValue().AsInteger(), 'tables_enabled');
+        // [THEN] It reported that it started no tables of none enabled, and the settings it ran with
+        Reported := ADLSEMonitorRecorder.Single('export_started');
+        LibraryAssert.AreEqual(0, ADLSEMonitorRecorder.Value(Reported, 'tables_started').AsInteger(), 'tables_started');
+        LibraryAssert.AreEqual(0, ADLSEMonitorRecorder.Value(Reported, 'tables_enabled').AsInteger(), 'tables_enabled');
+        LibraryAssert.AreEqual('', ADLSEMonitorRecorder.Value(Reported, 'tables_unreadable').AsText(), 'tables_unreadable');
+        LibraryAssert.AreEqual('00:00:00', ADLSEMonitorRecorder.Value(Reported, 'export_window_start').AsText(), 'export_window_start');
+        LibraryAssert.AreEqual('23:59:59', ADLSEMonitorRecorder.Value(Reported, 'export_window_end').AsText(), 'export_window_end');
+        LibraryAssert.AreEqual(900, ADLSEMonitorRecorder.Value(Reported, 'delayed_export_seconds').AsInteger(), 'delayed_export_seconds');
+        AssertDescribesThisSession(ADLSEMonitorRecorder, Reported);
+    end;
+
+    [Test]
+    [HandlerFunctions('S3Handler')]
+    procedure TestScheduledExport_ReportsASkipOutsideTheWindow()
+    var
+        ADLSESetup: Record "ADLSE Setup";
+        ADLSEMonitorRecorder: Codeunit "ADLSE Monitor Recorder";
+        Reported: JsonObject;
+    begin
+        // [SCENARIO] A scheduled export outside its window reports that it skipped, so a quiet day is told from a stopped schedule
+        // [GIVEN] An S3 export with a monitoring URL and an export window that does not include now
+        Initialize();
+        SetUpReasonCodeExportToS3();
+        SetMonitoring(200);
+        ADLSESetup.Get(0);
+        if DT2Time(CurrentDateTime()) < 120000T then begin
+            ADLSESetup."Export Window Start" := 130000T;
+            ADLSESetup."Export Window End" := 140000T;
+        end else begin
+            ADLSESetup."Export Window Start" := 010000T;
+            ADLSESetup."Export Window End" := 020000T;
+        end;
+        ADLSESetup.Modify();
+
+        // [WHEN] The scheduled export runs
+        BindSubscription(ADLSEMonitorRecorder);
+        Report.Run(Report::"ADLSE Schedule Task Assignment", false);
+        UnbindSubscription(ADLSEMonitorRecorder);
+
+        // [THEN] It reported the skip, and did not start
+        Reported := ADLSEMonitorRecorder.Single('export_skipped');
+        LibraryAssert.AreEqual(Format(ADLSESetup."Export Window Start", 0, 9), ADLSEMonitorRecorder.Value(Reported, 'export_window_start').AsText(), 'export_window_start');
+        LibraryAssert.AreEqual(0, ADLSEMonitorRecorder.Count('export_started'), 'export_started');
+    end;
+
+    [Test]
+    [HandlerFunctions('S3Handler')]
+    procedure TestScheduledExport_ReportsWhyItCouldNotStart()
+    var
+        ADLSESetup: Record "ADLSE Setup";
+        ADLSEMonitorRecorder: Codeunit "ADLSE Monitor Recorder";
+        Reported: JsonObject;
+    begin
+        // [SCENARIO] A scheduled export that cannot start reports why, and still fails its job queue entry
+        // [GIVEN] An S3 export with a monitoring URL but no bucket
+        Initialize();
+        SetUpReasonCodeExportToS3();
+        SetMonitoring(200);
+        ADLSESetup.Get(0);
+        ADLSESetup."S3 Bucket" := '';
+        ADLSESetup.Modify();
+        Commit();
+
+        // [WHEN] The scheduled export runs
+        BindSubscription(ADLSEMonitorRecorder);
+        asserterror Report.Run(Report::"ADLSE Schedule Task Assignment", false);
+        UnbindSubscription(ADLSEMonitorRecorder);
+
+        // [THEN] It failed, and reported the same error
+        Reported := ADLSEMonitorRecorder.Single('export_failed');
+        LibraryAssert.AreEqual(GetLastErrorText(), ADLSEMonitorRecorder.Value(Reported, 'error').AsText(), 'error');
+        LibraryAssert.IsTrue(GetLastErrorText().Contains('S3 bucket'), 'The error should name the missing bucket: ' + GetLastErrorText());
+        LibraryAssert.AreNotEqual('', ADLSEMonitorRecorder.Value(Reported, 'call_stack').AsText(), 'call_stack');
     end;
 
     [MessageHandler]
     procedure ExportStartedMessageHandler(Message: Text[1024])
     begin
+    end;
+
+    local procedure AssertDescribesThisSession(ADLSEMonitorRecorder: Codeunit "ADLSE Monitor Recorder"; Reported: JsonObject)
+    var
+        ModuleInfo: ModuleInfo;
+    begin
+        NavApp.GetModuleInfo('efbd8e9d-3612-4996-bb16-784208b15e1d', ModuleInfo);
+        LibraryAssert.AreEqual(Format(ModuleInfo.AppVersion()), ADLSEMonitorRecorder.Value(Reported, 'app_version').AsText(), 'app_version');
+        LibraryAssert.AreEqual(CompanyName(), ADLSEMonitorRecorder.Value(Reported, 'company').AsText(), 'company');
+        LibraryAssert.AreEqual(SessionId(), ADLSEMonitorRecorder.Value(Reported, 'session_id').AsInteger(), 'session_id');
+        LibraryAssert.AreEqual(UserId(), ADLSEMonitorRecorder.Value(Reported, 'user_id').AsText(), 'user_id');
+        LibraryAssert.AreEqual('bc2adls', ADLSEMonitorRecorder.Value(Reported, 's3_bucket').AsText(), 's3_bucket');
     end;
 
     local procedure SetMonitoring(Status: Integer)
@@ -284,6 +483,8 @@ codeunit 85580 "ADLSE S3 Export Tests"
             Response.HttpStatusCode := MonitoringStatus;
             exit(false);
         end;
+        if (Request.RequestType() = HttpRequestType::Put) and (PutStatus <> 0) then
+            Response.HttpStatusCode := PutStatus;
         if Request.RequestType() = HttpRequestType::Get then
             if (Url = EntityUrlTok) and (EntityJson <> '') then
                 Response.Content.WriteFrom(EntityJson)
@@ -302,6 +503,8 @@ codeunit 85580 "ADLSE S3 Export Tests"
         ADLSELibrarybc2adls.CleanUp();
         ADLSESessionManager.SavePendingTables('');
         Clear(Requests);
+        Clear(PutStatus);
+        Clear(MonitoringStatus);
 
         ReasonCode.DeleteAll(false);
         for i := 1 to 3 do
