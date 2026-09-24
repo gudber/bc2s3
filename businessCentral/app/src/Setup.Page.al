@@ -108,6 +108,25 @@ page 82560 "ADLSE Setup"
                     }
                 }
 
+                group(Monitoring)
+                {
+                    Caption = 'Monitoring';
+
+                    field(MonitoringURL; Rec."Monitoring URL") { }
+                    field(MonitoringUser; Rec."Monitoring User") { }
+                    field(MonitoringToken; MonitoringToken)
+                    {
+                        Caption = 'Monitoring token';
+                        ExtendedDatatype = Masked;
+                        ToolTip = 'Specifies the token sent with each report to the monitoring URL, e.g. an OpenObserve ingestion token.';
+
+                        trigger OnValidate()
+                        begin
+                            ADLSECredentials.SetMonitoringToken(MonitoringToken);
+                        end;
+                    }
+                }
+
                 group(AppRegistration)
                 {
                     Caption = 'App Registration';
@@ -549,6 +568,7 @@ page 82560 "ADLSE Setup"
         CertificateVisible, SecretVisible : Boolean;
         ClientSecretLbl: Label 'Secret not shown';
         ClientIdLbl: Label 'ID not shown';
+        MonitoringTokenLbl: Label 'Token not shown';
         CertificatePasswordSetLbl: Label 'Password set';
         CertificateStatusText: Text;
 
@@ -563,6 +583,8 @@ page 82560 "ADLSE Setup"
             ClientSecret := ClientSecretLbl;
         if ADLSECredentials.GetClientCertificatePassword() <> '' then
             ClientCertificatePassword := CertificatePasswordSetLbl;
+        if ADLSECredentials.GetMonitoringToken() <> '' then
+            MonitoringToken := MonitoringTokenLbl;
         UpdateAuthVisibility();
         UpdateCertificateStatus();
     end;
@@ -596,6 +618,8 @@ page 82560 "ADLSE Setup"
         ClientSecret: Text;
         [NonDebuggable]
         ClientCertificatePassword: Text;
+        [NonDebuggable]
+        MonitoringToken: Text;
         OldLogsExist: Boolean;
         FailureNotificationID: Guid;
         ExportFailureNotificationMsg: Label 'Data from one or more tables failed to export on the last run. Please check the tables below to see the error(s).';

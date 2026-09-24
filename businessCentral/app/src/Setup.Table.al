@@ -315,6 +315,22 @@ table 82560 "ADLSE Setup"
             Caption = 'Export window end';
             ToolTip = 'Specifies the time of day at which scheduled exports stop, e.g. 06:00. The window may span midnight.';
         }
+        field(140; "Monitoring URL"; Text[250])
+        {
+            Caption = 'Monitoring URL';
+            ToolTip = 'Specifies the https address each export and table run is reported to as JSON, e.g. an OpenObserve stream: https://eu1-api.openobserve.ai/api/<organization>/bc_export/_json. Leave it empty to report nothing.';
+
+            trigger OnValidate()
+            begin
+                if (Rec."Monitoring URL" <> '') and not Rec."Monitoring URL".StartsWith('https://') then
+                    Error(MonitoringUrlNotHttpsErr);
+            end;
+        }
+        field(145; "Monitoring User"; Text[100])
+        {
+            Caption = 'Monitoring user';
+            ToolTip = 'Specifies the user name sent with the monitoring token. For an OpenObserve ingestion token, the organization ID.';
+        }
     }
 
     keys
@@ -347,6 +363,7 @@ table 82560 "ADLSE Setup"
         MaximumRetriesErr: Label 'Please enter a value that is equal or smaller than 10 for the maximum retries.';
         NoSchemaExportedErr: Label 'No schema has been exported yet. Please export schema first before exporting the data.';
         S3EndpointNotHttpsErr: Label 'The S3 endpoint must start with https://.';
+        MonitoringUrlNotHttpsErr: Label 'The monitoring URL must start with https://.';
 
     local procedure TextCharactersOtherThan(String: Text; CharString: Text): Boolean
     var

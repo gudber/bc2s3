@@ -44,6 +44,7 @@ codeunit 82569 "ADLSE Execution"
         ADLSESessionManager: Codeunit "ADLSE Session Manager";
         ADLSEExternalEvents: Codeunit "ADLSE External Events";
         ADLSEUtil: Codeunit "ADLSE Util";
+        ADLSEMonitor: Codeunit "ADLSE Monitor";
         Counter: Integer;
         Started: Integer;
         HasSyncCompanyRecord: Boolean;
@@ -87,6 +88,7 @@ codeunit 82569 "ADLSE Execution"
             ADLSECurrentSession.Stop(Database::"ADLSE Sync Companies", EmitTelemetry, ADLSEUtil.GetTableCaption(Database::"ADLSE Sync Companies"));
         end;
 
+        ADLSEMonitor.ReportExportStarted(Started, Counter);
         Message(ExportStartedTxt, Started, Counter);
         if EmitTelemetry then
             Log('ADLSE-001', StrSubstNo(ExportStartedTxt, Started, Counter), Verbosity::Normal);

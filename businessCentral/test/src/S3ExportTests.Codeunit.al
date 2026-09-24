@@ -22,6 +22,8 @@ codeunit 85580 "ADLSE S3 Export Tests"
         EntityJson: Text;
         EntityUrlTok: Label 'https://fsn1.your-objectstorage.com/bc2adls/ReasonCode-231.cdm.json', Locked = true;
         DeltasPrefixTok: Label 'https://fsn1.your-objectstorage.com/bc2adls/deltas/ReasonCode-231/', Locked = true;
+        MonitoringUrlTok: Label 'https://eu1-api.openobserve.ai/api/test-org/bc_export/_json', Locked = true;
+        MonitoringStatus: Integer;
 
     [Test]
     [HandlerFunctions('S3Handler')]
@@ -141,6 +143,135 @@ codeunit 85580 "ADLSE S3 Export Tests"
         Result[2] := 10;
     end;
 
+    [Test]
+    [HandlerFunctions('S3Handler')]
+    procedure TestExport_ReportsTheTablesRunToTheMonitoringUrl()
+    var
+        ADLSEExecute: Codeunit "ADLSE Execute";
+        ADLSEMonitorRecorder: Codeunit "ADLSE Monitor Recorder";
+        Reported: JsonObject;
+        Token: JsonToken;
+    begin
+        // [SCENARIO] Each table's export is reported to the monitoring URL: which table, how it went, how many records
+        // [GIVEN] Three reason codes exported to S3, with a monitoring URL
+        Initialize();
+        SetUpReasonCodeExportToS3();
+        SetMonitoring(200);
+
+        // [WHEN] The table is exported
+        BindSubscription(ADLSEMonitorRecorder);
+        ADLSEExecute.Run(ADLSETable);
+        UnbindSubscription(ADLSEMonitorRecorder);
+
+        // [THEN] One event was posted to the monitoring URL, saying the table was exported with its three records
+        LibraryAssert.IsTrue(Requests.Contains('POST ' + MonitoringUrlTok), 'The run should be reported to the monitoring URL');
+        LibraryAssert.AreEqual(1, ADLSEMonitorRecorder.Reported().Count(), 'reported events');
+        Reported.ReadFrom(ADLSEMonitorRecorder.Reported().Get(1));
+        Reported.Get('event', Token);
+        LibraryAssert.AreEqual('table_exported', Token.AsValue().AsText(), 'event');
+        Reported.Get('table_id', Token);
+        LibraryAssert.AreEqual(Database::"Reason Code", Token.AsValue().AsInteger(), 'table_id');
+        Reported.Get('state', Token);
+        LibraryAssert.AreEqual('Success', Token.AsValue().AsText(), 'state');
+        Reported.Get('records', Token);
+        LibraryAssert.AreEqual(3, Token.AsValue().AsInteger(), 'records');
+        Reported.Get('company', Token);
+        LibraryAssert.AreEqual(CompanyName(), Token.AsValue().AsText(), 'company');
+    end;
+
+    [Test]
+    [HandlerFunctions('S3Handler')]
+    procedure TestExport_SucceedsWhenTheMonitoringUrlFails()
+    var
+        ADLSERun: Record "ADLSE Run";
+        ADLSEExecute: Codeunit "ADLSE Execute";
+    begin
+        // [SCENARIO] Monitoring must never stop the data: a failing monitoring URL does not fail the export
+        // [GIVEN] Reason codes exported to S3, with a monitoring URL that answers 500
+        Initialize();
+        SetUpReasonCodeExportToS3();
+        SetMonitoring(500);
+
+        // [WHEN] The table is exported
+        ADLSEExecute.Run(ADLSETable);
+
+        // [THEN] The export succeeded and its delta was written
+        ADLSERun.SetRange("Table ID", Database::"Reason Code");
+        ADLSERun.FindLast();
+        LibraryAssert.AreEqual(ADLSERun.State::Success, ADLSERun.State, 'The export should succeed: ' + ADLSERun.Error);
+        SinglePutUnder(DeltasPrefixTok);
+    end;
+
+    [Test]
+    [HandlerFunctions('S3Handler')]
+    procedure TestExport_WithoutMonitoringUrlReportsNothing()
+    var
+        ADLSEExecute: Codeunit "ADLSE Execute";
+        Request: Text;
+    begin
+        // [SCENARIO] Monitoring is off until a monitoring URL is set
+        // [GIVEN] Reason codes exported to S3, without a monitoring URL
+        Initialize();
+        SetUpReasonCodeExportToS3();
+
+        // [WHEN] The table is exported
+        ADLSEExecute.Run(ADLSETable);
+
+        // [THEN] Nothing but S3 was called
+        foreach Request in Requests do
+            LibraryAssert.IsTrue(Request.Contains('your-objectstorage.com'), 'Only S3 should be called: ' + Request);
+    end;
+
+    [Test]
+    [HandlerFunctions('S3Handler,ExportStartedMessageHandler')]
+    procedure TestStartExport_ReportsThatTheExportStarted()
+    var
+        ADLSEExecution: Codeunit "ADLSE Execution";
+        ADLSEMonitorRecorder: Codeunit "ADLSE Monitor Recorder";
+        Reported: JsonObject;
+        Token: JsonToken;
+    begin
+        // [SCENARIO] Every export reports that it started, even when no table has changes, so a stopped schedule shows
+        // [GIVEN] An S3 export with a monitoring URL and no tables
+        Initialize();
+        SetUpReasonCodeExportToS3();
+        ADLSETable.Delete(true);
+        SetMonitoring(200);
+
+        // [WHEN] The export starts
+        BindSubscription(ADLSEMonitorRecorder);
+        ADLSEExecution.StartExport();
+        UnbindSubscription(ADLSEMonitorRecorder);
+
+        // [THEN] It reported that it started no tables of none enabled
+        LibraryAssert.AreEqual(1, ADLSEMonitorRecorder.Reported().Count(), 'reported events');
+        Reported.ReadFrom(ADLSEMonitorRecorder.Reported().Get(1));
+        Reported.Get('event', Token);
+        LibraryAssert.AreEqual('export_started', Token.AsValue().AsText(), 'event');
+        Reported.Get('tables_started', Token);
+        LibraryAssert.AreEqual(0, Token.AsValue().AsInteger(), 'tables_started');
+        Reported.Get('tables_enabled', Token);
+        LibraryAssert.AreEqual(0, Token.AsValue().AsInteger(), 'tables_enabled');
+    end;
+
+    [MessageHandler]
+    procedure ExportStartedMessageHandler(Message: Text[1024])
+    begin
+    end;
+
+    local procedure SetMonitoring(Status: Integer)
+    var
+        ADLSESetup: Record "ADLSE Setup";
+        ADLSECredentials: Codeunit "ADLSE Credentials";
+    begin
+        ADLSESetup.Get(0);
+        ADLSESetup."Monitoring URL" := MonitoringUrlTok;
+        ADLSESetup."Monitoring User" := 'test-org';
+        ADLSESetup.Modify();
+        ADLSECredentials.SetMonitoringToken('o2oi_test');
+        MonitoringStatus := Status;
+    end;
+
     [HttpClientHandler]
     procedure S3Handler(Request: TestHttpRequestMessage; var Response: TestHttpResponseMessage): Boolean
     var
@@ -149,6 +280,10 @@ codeunit 85580 "ADLSE S3 Export Tests"
         Url := Request.Path();
         Requests.Add(Format(Request.RequestType()).ToUpper() + ' ' + Url);
         Response.HttpStatusCode := 200;
+        if Url = MonitoringUrlTok then begin
+            Response.HttpStatusCode := MonitoringStatus;
+            exit(false);
+        end;
         if Request.RequestType() = HttpRequestType::Get then
             if (Url = EntityUrlTok) and (EntityJson <> '') then
                 Response.Content.WriteFrom(EntityJson)

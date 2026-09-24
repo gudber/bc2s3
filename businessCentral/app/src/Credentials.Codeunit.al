@@ -23,6 +23,9 @@ codeunit 82565 "ADLSE Credentials"
         [NonDebuggable]
         ClientCertificatePassword: Text;
 
+        [NonDebuggable]
+        MonitoringToken: Text;
+
         Initialized: Boolean;
         ValueNotFoundErr: Label 'No value found for %1.', Comment = '%1 = name of the key';
         TenantIdKeyNameTok: Label 'adlse-tenant-id', Locked = true;
@@ -30,6 +33,7 @@ codeunit 82565 "ADLSE Credentials"
         ClientSecretKeyNameTok: Label 'adlse-client-secret', Locked = true;
         ClientCertificateKeyNameTok: Label 'adlse-certificate', Locked = true;
         ClientCertificatePasswordKeyNameTok: Label 'adlse-certificate-password', Locked = true;
+        MonitoringTokenKeyNameTok: Label 'adlse-monitoring-token', Locked = true;
 
     [NonDebuggable]
     procedure Init()
@@ -39,6 +43,7 @@ codeunit 82565 "ADLSE Credentials"
         ClientSecret := GetSecret(ClientSecretKeyNameTok);
         ClientCertificate := GetSecret(ClientCertificateKeyNameTok);
         ClientCertificatePassword := GetSecret(ClientCertificatePasswordKeyNameTok);
+        MonitoringToken := GetSecret(MonitoringTokenKeyNameTok);
         Initialized := true;
     end;
 
@@ -146,6 +151,19 @@ codeunit 82565 "ADLSE Credentials"
     begin
         ClientCertificatePassword := NewPasswordValue;
         SetSecret(ClientCertificatePasswordKeyNameTok, NewPasswordValue);
+    end;
+
+    [NonDebuggable]
+    procedure GetMonitoringToken(): Text
+    begin
+        exit(MonitoringToken);
+    end;
+
+    [NonDebuggable]
+    procedure SetMonitoringToken(NewMonitoringToken: Text)
+    begin
+        MonitoringToken := NewMonitoringToken;
+        SetSecret(MonitoringTokenKeyNameTok, NewMonitoringToken);
     end;
 
     [NonDebuggable]

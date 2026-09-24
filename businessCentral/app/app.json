@@ -23,6 +23,10 @@
     {
       "from": 82560,
       "to": 82585
+    },
+    {
+      "from": 82586,
+      "to": 82599
     }
   ],
   "internalsVisibleTo": [

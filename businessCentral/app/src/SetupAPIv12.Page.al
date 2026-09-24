@@ -36,6 +36,8 @@ page 82572 "ADLSE Setup API v12"
                 field(s3Bucket; Rec."S3 Bucket") { }
                 field(exportWindowStart; Rec."Export Window Start") { }
                 field(exportWindowEnd; Rec."Export Window End") { }
+                field(monitoringUrl; Rec."Monitoring URL") { }
+                field(monitoringUser; Rec."Monitoring User") { }
                 field(delayedExport; Rec."Delayed Export") { }
                 field(exportCompanyDatabaseTables; Rec."Export Company Database Tables") { }
                 field(emitTelemetry; Rec."Emit telemetry") { }
