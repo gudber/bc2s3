@@ -178,7 +178,7 @@ codeunit 85580 "ADLSE S3 Export Tests"
         LibraryAssert.AreEqual(0, ADLSEMonitorRecorder.Value(Reported, 'records_deleted').AsInteger(), 'records_deleted');
         LibraryAssert.AreEqual(0, ADLSEMonitorRecorder.Value(Reported, 'records_delayed').AsInteger(), 'records_delayed');
         LibraryAssert.AreEqual(1, ADLSEMonitorRecorder.Value(Reported, 'objects_written').AsInteger(), 'objects_written');
-        LibraryAssert.AreEqual(0, ADLSEMonitorRecorder.Value(Reported, 'timestamp_before').AsBigInteger(), 'timestamp_before');
+        LibraryAssert.AreEqual(0L, ADLSEMonitorRecorder.Value(Reported, 'timestamp_before').AsBigInteger(), 'timestamp_before');
         LibraryAssert.IsTrue(ADLSEMonitorRecorder.Value(Reported, 'timestamp_after').AsBigInteger() > 0, 'timestamp_after');
         LibraryAssert.IsFalse(ADLSEMonitorRecorder.Value(Reported, 'stopped_at_window_end').AsBoolean(), 'stopped_at_window_end');
         LibraryAssert.AreEqual('', ADLSEMonitorRecorder.Value(Reported, 'error').AsText(), 'error');
@@ -359,6 +359,7 @@ codeunit 85580 "ADLSE S3 Export Tests"
         ADLSESetup."Export Window Start" := 000000T;
         ADLSESetup."Export Window End" := 235959T;
         ADLSESetup."Delayed Export" := 900;
+        ADLSESetup."Schema Exported On" := CurrentDateTime();
         ADLSESetup.Modify();
 
         // [WHEN] The export starts
@@ -495,6 +496,7 @@ codeunit 85580 "ADLSE S3 Export Tests"
 
     local procedure SetUpReasonCodeExportToS3()
     var
+        ADLSECurrentSession: Record "ADLSE Current Session";
         ReasonCode: Record "Reason Code";
         ADLSECredentials: Codeunit "ADLSE Credentials";
         ADLSESessionManager: Codeunit "ADLSE Session Manager";
@@ -502,6 +504,8 @@ codeunit 85580 "ADLSE S3 Export Tests"
     begin
         ADLSELibrarybc2adls.CleanUp();
         ADLSESessionManager.SavePendingTables('');
+        // An export session one test left behind, committed, would keep the next from exporting the table.
+        ADLSECurrentSession.DeleteAll(false);
         Clear(Requests);
         Clear(PutStatus);
         Clear(MonitoringStatus);

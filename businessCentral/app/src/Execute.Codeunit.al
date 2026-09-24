@@ -26,6 +26,7 @@ codeunit 82561 "ADLSE Execute"
         ExportSuccess: Boolean;
     begin
         ADLSESetup.GetSingleton();
+        ClearRunState();
         EmitTelemetry := ADLSESetup."Emit telemetry";
         CDMDataFormat := ADLSESetup.DataFormat;
         // An export started within the export window stops at its end and continues in the next window. That is only
@@ -182,6 +183,17 @@ codeunit 82561 "ADLSE Execute"
                     Error(ErrorMessage);
                 end;
         end;
+    end;
+
+    // A codeunit variable keeps its state between runs, so each run starts from none.
+    local procedure ClearRunState()
+    begin
+        StoppedAtWindowEnd := false;
+        RecordsUpdated := 0;
+        RecordsDeleted := 0;
+        RecordsDelayed := 0;
+        Clear(RunDetails);
+        Clear(ADLSECommunicationDeletions);
     end;
 
     local procedure HasExportWindowEnded(): Boolean
