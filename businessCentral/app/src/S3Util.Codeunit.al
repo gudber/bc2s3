@@ -35,6 +35,15 @@ codeunit 82585 "ADLSE S3 Util"
         Response := Send('PUT', Url, Content);
         if not Response.IsSuccessStatusCode() then
             Error(RequestRejectedErr, 'PUT', Url, Response.HttpStatusCode(), ReadBody(Response));
+        OnAfterPutObject(Url, Body);
+    end;
+
+    /// <summary>
+    /// Raised after an object was put, with its URL and content.
+    /// </summary>
+    [IntegrationEvent(false, false)]
+    local procedure OnAfterPutObject(Url: Text; Body: Text)
+    begin
     end;
 
     procedure GetObject(Url: Text; var ObjectExists: Boolean): Text

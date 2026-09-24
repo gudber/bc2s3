@@ -96,6 +96,51 @@ codeunit 85580 "ADLSE S3 Export Tests"
             LibraryAssert.IsFalse(Request.Contains('manifest'), 'No manifest should be touched: ' + Request);
     end;
 
+    [Test]
+    [HandlerFunctions('S3Handler')]
+    procedure TestExport_S3_EveryObjectStartsWithTheHeader()
+    var
+        ADLSESetup: Record "ADLSE Setup";
+        ReasonCode: Record "Reason Code";
+        ADLSEExecute: Codeunit "ADLSE Execute";
+        ADLSES3PutRecorder: Codeunit "ADLSE S3 Put Recorder";
+        Body: Text;
+        Header: Text;
+        i: Integer;
+    begin
+        // [SCENARIO] A table too big for one object is exported as several, and each starts with the CSV header
+        // [GIVEN] Enough reason codes for more than one 1 MiB object
+        Initialize();
+        SetUpReasonCodeExportToS3();
+        ADLSESetup.Get(0);
+        ADLSESetup.MaxPayloadSizeMiB := 1;
+        ADLSESetup.Modify();
+        for i := 1 to 6000 do begin
+            ReasonCode.Init();
+            ReasonCode.Code := CopyStr(StrSubstNo('R%1', i), 1, MaxStrLen(ReasonCode.Code));
+            ReasonCode.Description := PadStr('', MaxStrLen(ReasonCode.Description), 'x');
+            ReasonCode.Insert();
+        end;
+
+        // [WHEN] The table is exported
+        BindSubscription(ADLSES3PutRecorder);
+        ADLSEExecute.Run(ADLSETable);
+        UnbindSubscription(ADLSES3PutRecorder);
+
+        // [THEN] It took several objects, each starting with the same header
+        LibraryAssert.IsTrue(ADLSES3PutRecorder.CsvBodies().Count() > 1, 'The export should need more than one object');
+        Header := ADLSES3PutRecorder.CsvBodies().Get(1).Split(CRLF()).Get(1);
+        LibraryAssert.IsTrue(Header.StartsWith('Code-1,'), 'The first object should start with the header: ' + Header);
+        foreach Body in ADLSES3PutRecorder.CsvBodies() do
+            LibraryAssert.AreEqual(Header, Body.Split(CRLF()).Get(1), 'Every object should start with the header');
+    end;
+
+    local procedure CRLF() Result: Text[2]
+    begin
+        Result[1] := 13;
+        Result[2] := 10;
+    end;
+
     [HttpClientHandler]
     procedure S3Handler(Request: TestHttpRequestMessage; var Response: TestHttpResponseMessage): Boolean
     var

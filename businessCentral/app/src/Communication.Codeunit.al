@@ -314,6 +314,9 @@ codeunit 82562 "ADLSE Communication"
                 // the record alone exceeds the max payload size
                 Error(SingleRecordTooLargeErr);
             FlushPayload();
+            // On S3 the record starts a new object, which needs the header its payload was made without.
+            if IsS3() then
+                Payload.Append(ADLSEUtil.CreateCsvHeader(RecordRef, FieldIdList));
             if ADLSESetup."Storage Type" = ADLSESetup."Storage Type"::"Open Mirroring" then
                 UpdateInProgressTimeStampOnTable(RecordRef.Number(), RecordTimeStamp, Deletes);
             // On S3 every flush is an object of its own, so after each one the export can continue from what it sent.
