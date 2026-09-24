@@ -316,6 +316,10 @@ codeunit 82562 "ADLSE Communication"
             FlushPayload();
             if ADLSESetup."Storage Type" = ADLSESetup."Storage Type"::"Open Mirroring" then
                 UpdateInProgressTimeStampOnTable(RecordRef.Number(), RecordTimeStamp, Deletes);
+            // On S3 every flush is an object of its own, so after each one the export can continue from what it sent.
+            // Only records read in timestamp order make the last timestamp sent the place to continue from.
+            if IsS3() and not ADLSESetup."Skip Timestamp Sorting On Recs" then
+                UpdateInProgressTimeStampOnTable(RecordRef.Number(), LastFlushedTimeStamp, Deletes);
         end;
         if CombineUpsertsAndDeletes and Deletes then
             LastTimestampExported := LastFlushedDeletedEntryNo

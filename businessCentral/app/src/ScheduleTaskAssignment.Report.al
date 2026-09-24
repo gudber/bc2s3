@@ -14,8 +14,13 @@ report 82561 "ADLSE Schedule Task Assignment"
             RequestFilterFields = ExportCategory;
             trigger OnPreDataItem()
             var
+                ADLSESetup: Record "ADLSE Setup";
                 ADLSEExecution: Codeunit "ADLSE Execution";
             begin
+                // Scheduled exports run only within the export window; exports started by hand run at any time.
+                ADLSESetup.GetSingleton();
+                if not ADLSESetup.IsWithinExportWindow(DT2Time(CurrentDateTime())) then
+                    CurrReport.Break();
                 ADLSEExecution.StartExport(ADLSETable);
             end;
         }

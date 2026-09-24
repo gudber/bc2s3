@@ -34,6 +34,8 @@ page 82572 "ADLSE Setup API v12"
                 field(s3Endpoint; Rec."S3 Endpoint") { }
                 field(s3Region; Rec."S3 Region") { }
                 field(s3Bucket; Rec."S3 Bucket") { }
+                field(exportWindowStart; Rec."Export Window Start") { }
+                field(exportWindowEnd; Rec."Export Window End") { }
                 field(emitTelemetry; Rec."Emit telemetry") { }
                 field(dataFormat; Rec.DataFormat) { }
                 field(maxPayloadSizeMiB; Rec.MaxPayloadSizeMiB) { }
@@ -85,6 +87,15 @@ page 82572 "ADLSE Setup API v12"
         ADLSEExecution: Codeunit "ADLSE Execution";
     begin
         ADLSEExecution.SchemaExport();
+        SetActionResponse(ActionContext, Rec."SystemId");
+    end;
+
+    [ServiceEnabled]
+    procedure ScheduleExport(var ActionContext: WebServiceActionContext)
+    var
+        ADLSESetup: Codeunit "ADLSE Setup";
+    begin
+        ADLSESetup.ScheduleExport(30);
         SetActionResponse(ActionContext, Rec."SystemId");
     end;
 

@@ -17,6 +17,8 @@ codeunit 82560 "ADLSE Setup"
     Access = Internal;
 
     var
+        JobQueueCategoryTok: Label 'ADLSE', Locked = true;
+        ScheduledExportLbl: Label 'Malia Data Silo Export', MaxLength = 30;
         FieldClassNotSupportedErr: Label 'The field %1 of class %2 is not supported.', Comment = '%1 = field name, %2 = field class';
         SelectTableLbl: Label 'Select the tables to be exported';
         FieldObsoleteNotSupportedErr: Label 'The field %1 is obsolete', Comment = '%1 = field name';
@@ -56,6 +58,40 @@ codeunit 82560 "ADLSE Setup"
                                     ADLSETable.AddAllFields();
                                 end;
             until AllObj.Next() = 0;
+    end;
+
+    /// <summary>
+    /// Keeps one recurring job queue entry that starts the scheduled export every given number of minutes, every day,
+    /// and sets it ready to run. The export window decides when those runs actually export.
+    /// </summary>
+    procedure ScheduleExport(MinutesBetweenRuns: Integer)
+    var
+        JobQueueEntry: Record "Job Queue Entry";
+        JobQueueCategory: Record "Job Queue Category";
+    begin
+        JobQueueEntry.SetRange("Object Type to Run", JobQueueEntry."Object Type to Run"::Report);
+        JobQueueEntry.SetRange("Object ID to Run", Report::"ADLSE Schedule Task Assignment");
+        if not JobQueueEntry.FindFirst() then begin
+            JobQueueCategory.InsertRec(JobQueueCategoryTok, ScheduledExportLbl);
+            JobQueueEntry.Init();
+            JobQueueEntry.Validate("Object Type to Run", JobQueueEntry."Object Type to Run"::Report);
+            JobQueueEntry.Validate("Object ID to Run", Report::"ADLSE Schedule Task Assignment");
+            JobQueueEntry.Insert(true);
+        end else
+            JobQueueEntry.SetStatus(JobQueueEntry.Status::"On Hold");
+        JobQueueEntry.Description := ScheduledExportLbl;
+        JobQueueEntry."Job Queue Category Code" := JobQueueCategoryTok;
+        JobQueueEntry."Report Output Type" := JobQueueEntry."Report Output Type"::"None (Processing only)";
+        JobQueueEntry.Validate("Run on Mondays", true);
+        JobQueueEntry.Validate("Run on Tuesdays", true);
+        JobQueueEntry.Validate("Run on Wednesdays", true);
+        JobQueueEntry.Validate("Run on Thursdays", true);
+        JobQueueEntry.Validate("Run on Fridays", true);
+        JobQueueEntry.Validate("Run on Saturdays", true);
+        JobQueueEntry.Validate("Run on Sundays", true);
+        JobQueueEntry.Validate("No. of Minutes between Runs", MinutesBetweenRuns);
+        JobQueueEntry.Modify(true);
+        JobQueueEntry.SetStatus(JobQueueEntry.Status::Ready);
     end;
 
     /// <summary>

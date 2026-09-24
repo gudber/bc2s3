@@ -199,6 +199,8 @@ page 82560 "ADLSE Setup"
                     Importance = Additional;
                     Enabled = not ExportInProgress;
                 }
+                field(ExportWindowStart; Rec."Export Window Start") { }
+                field(ExportWindowEnd; Rec."Export Window End") { }
                 field("Delayed Export"; Rec."Delayed Export")
                 {
                     Importance = Additional;

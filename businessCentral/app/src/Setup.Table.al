@@ -305,6 +305,16 @@ table 82560 "ADLSE Setup"
             Caption = 'S3 bucket';
             ToolTip = 'Specifies the bucket the data is exported to.';
         }
+        field(130; "Export Window Start"; Time)
+        {
+            Caption = 'Export window start';
+            ToolTip = 'Specifies the time of day from which scheduled exports may run, e.g. 20:00. Leave the window empty to let them run at any time. A scheduled export still running at the end of the window stops and continues in the next window.';
+        }
+        field(135; "Export Window End"; Time)
+        {
+            Caption = 'Export window end';
+            ToolTip = 'Specifies the time of day at which scheduled exports stop, e.g. 06:00. The window may span midnight.';
+        }
     }
 
     keys
@@ -373,6 +383,27 @@ table 82560 "ADLSE Setup"
     local procedure GetPrimaryKeyValue() PKValue: Integer
     begin
         Evaluate(PKValue, PrimaryKeyValueLbl, 9);
+    end;
+
+    /// <summary>
+    /// Whether scheduled exports are limited to a time of day.
+    /// </summary>
+    procedure HasExportWindow(): Boolean
+    begin
+        exit((Rec."Export Window Start" <> 0T) or (Rec."Export Window End" <> 0T));
+    end;
+
+    /// <summary>
+    /// Whether scheduled exports may run at a time of day: from the window's start up to, not including, its end. A
+    /// window whose start is after its end spans midnight. Without a window, any time is inside it.
+    /// </summary>
+    procedure IsWithinExportWindow(TimeOfDay: Time): Boolean
+    begin
+        if not HasExportWindow() then
+            exit(true);
+        if Rec."Export Window Start" <= Rec."Export Window End" then
+            exit((TimeOfDay >= Rec."Export Window Start") and (TimeOfDay < Rec."Export Window End"));
+        exit((TimeOfDay >= Rec."Export Window Start") or (TimeOfDay < Rec."Export Window End"));
     end;
 
     /// <summary>

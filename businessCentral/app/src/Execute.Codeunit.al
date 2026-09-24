@@ -28,6 +28,11 @@ codeunit 82561 "ADLSE Execute"
         ADLSESetup.GetSingleton();
         EmitTelemetry := ADLSESetup."Emit telemetry";
         CDMDataFormat := ADLSESetup.DataFormat;
+        // An export started within the export window stops at its end and continues in the next window. That is only
+        // safe when records are read in timestamp order, so that the last timestamp sent marks where to continue.
+        ExportWindow := ADLSESetup;
+        StopsAtWindowEnd := ADLSESetup.HasExportWindow() and ADLSESetup.IsWithinExportWindow(DT2Time(CurrentDateTime()))
+            and not ADLSESetup."Skip Timestamp Sorting On Recs";
 
         if EmitTelemetry then begin
             TableCaption := ADLSEUtil.GetTableCaption(Rec."Table ID");
@@ -99,6 +104,9 @@ codeunit 82561 "ADLSE Execute"
         InsufficientReadPermErr: Label 'You do not have sufficient permissions to read from the table.';
         EmitTelemetry: Boolean;
         CDMDataFormat: Enum "ADLSE CDM Format";
+        ExportWindow: Record "ADLSE Setup";
+        StopsAtWindowEnd: Boolean;
+        StoppedAtWindowEnd: Boolean;
 
     [TryFunction]
     local procedure TryExportTableData(TableID: Integer; var ADLSECommunication: Codeunit "ADLSE Communication";
@@ -149,10 +157,11 @@ codeunit 82561 "ADLSE Execute"
         end else begin
             ExportTableUpdates(TableID, FieldIdList, ADLSECommunication, UpdatedLastTimeStamp, DidUpserts, true);
 
-            // then export the deletes
+            // then export the deletes, unless the export window ended: they follow the updates in the next window
             ADLSECommunicationDeletions.Init(TableID, FieldIdList, DeletedLastEntryNo, EmitTelemetry);
             // entity has been already checked above
-            ExportTableDeletes(TableID, ADLSECommunicationDeletions, DeletedLastEntryNo, DidUpserts, DidDeletes, true);
+            if not StoppedAtWindowEnd then
+                ExportTableDeletes(TableID, ADLSECommunicationDeletions, DeletedLastEntryNo, DidUpserts, DidDeletes, true);
 
             // A table that is empty on its initial export never produces a CSV file, so Fabric Open Mirroring never
             // sees it leave the "Snapshotting" state and eventually marks it as failed. Write a header-only file instead.
@@ -164,6 +173,11 @@ codeunit 82561 "ADLSE Execute"
                     Error(ErrorMessage);
                 end;
         end;
+    end;
+
+    local procedure HasExportWindowEnded(): Boolean
+    begin
+        exit(StopsAtWindowEnd and not ExportWindow.IsWithinExportWindow(DT2Time(CurrentDateTime())));
     end;
 
     internal procedure UpdatedRecordsExist(TableID: Integer; UpdatedLastTimeStamp: BigInteger): Boolean
@@ -216,6 +230,7 @@ codeunit 82561 "ADLSE Execute"
         RecordModifiedAt: DateTime;
         CollectedAndSent: Boolean;
         NoMoreToCollect: Boolean;
+        RecordsRead: Integer;
     begin
         ADLSESetup.GetSingleton();
 
@@ -272,7 +287,10 @@ codeunit 82561 "ADLSE Execute"
 
                 if CollectedAndSent then
                     NoMoreToCollect := RecordRef.Next() = 0;
-            until (not CollectedAndSent or NoMoreToCollect);
+                RecordsRead += 1;
+                if RecordsRead mod 1000 = 0 then
+                    StoppedAtWindowEnd := HasExportWindowEnded();
+            until (not CollectedAndSent or NoMoreToCollect or StoppedAtWindowEnd);
 
             if ErrorMessage.Message() <> '' then
                 Error(ErrorMessage);
