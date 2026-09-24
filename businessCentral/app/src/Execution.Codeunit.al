@@ -163,6 +163,17 @@ codeunit 82569 "ADLSE Execution"
 
     [InherentPermissions(PermissionObjectType::TableData, Database::"ADLSE Setup", 'm')]
     internal procedure ClearSchemaExportedOn()
+    begin
+        ClearSchemaExportDate();
+        if GuiAllowed() then
+            Message(ClearSchemaExportedOnMsg);
+    end;
+
+    /// <summary>
+    /// Clears the schema export date without telling the user, for operations that change the schema as one step of
+    /// their own.
+    /// </summary>
+    internal procedure ClearSchemaExportDate()
     var
         ADLSESetup: Record "ADLSE Setup";
         ADLSEExternalEvents: Codeunit "ADLSE External Events";
@@ -170,9 +181,6 @@ codeunit 82569 "ADLSE Execution"
         ADLSESetup.GetSingleton();
         ADLSESetup."Schema Exported On" := 0DT;
         ADLSESetup.Modify(true);
-        if GuiAllowed() then
-            Message(ClearSchemaExportedOnMsg);
-
         ADLSEExternalEvents.OnClearSchemaExportedOn(ADLSESetup);
     end;
 

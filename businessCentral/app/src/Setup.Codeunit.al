@@ -39,7 +39,7 @@ codeunit 82560 "ADLSE Setup"
         ThisExtension: ModuleInfo;
     begin
         NavApp.GetCurrentModuleInfo(ThisExtension);
-        ADLSEExecution.ClearSchemaExportedOn();
+        ADLSEExecution.ClearSchemaExportDate();
 
         AllObj.SetRange("Object Type", AllObj."Object Type"::Table);
         AllObj.SetFilter("Object ID", '<%1', 2000000000); // BC's system tables start at 2000000000
