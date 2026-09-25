@@ -104,6 +104,15 @@ page 82572 "ADLSE Setup API v12"
     end;
 
     [ServiceEnabled]
+    procedure CheckMonitoring(var ActionContext: WebServiceActionContext)
+    var
+        ADLSEMonitor: Codeunit "ADLSE Monitor";
+    begin
+        ADLSEMonitor.CheckMonitoring();
+        SetActionResponse(ActionContext, Rec."SystemId");
+    end;
+
+    [ServiceEnabled]
     procedure AddAllTables(var ActionContext: WebServiceActionContext)
     var
         ADLSESetup: Codeunit "ADLSE Setup";

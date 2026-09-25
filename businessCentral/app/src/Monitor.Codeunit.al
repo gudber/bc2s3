@@ -11,6 +11,35 @@ codeunit 82586 "ADLSE Monitor"
     Access = Internal;
     Permissions = tabledata "ADLSE Run" = r;
 
+    var
+        NoMonitoringUrlErr: Label 'Set the monitoring URL first.';
+        MonitoringUnreachableErr: Label 'Could not reach the monitoring URL %1: %2', Comment = '%1 = URL, %2 = error';
+        MonitoringRefusedErr: Label 'The monitoring URL refused the test event with status %1: %2', Comment = '%1 = HTTP status, %2 = its answer';
+        MonitoringAnsweredTxt: Label 'The monitoring URL took the test event with status %1: %2', Comment = '%1 = HTTP status, %2 = its answer';
+
+    /// <summary>
+    /// Sends a test event to the monitoring URL and gives its answer; an error with the answer when it refuses it.
+    /// </summary>
+    procedure CheckMonitoring(): Text
+    var
+        ADLSESetup: Record "ADLSE Setup";
+        ADLSECredentials: Codeunit "ADLSE Credentials";
+        Body: Text;
+        Status: Integer;
+        Answer: Text;
+    begin
+        ADLSESetup.GetSingleton();
+        if ADLSESetup."Monitoring URL" = '' then
+            Error(NoMonitoringUrlErr);
+        ADLSECredentials.Init();
+        NewEvent('monitoring_check').WriteTo(Body);
+        if not Send(ADLSESetup."Monitoring URL", ADLSESetup."Monitoring User", ADLSECredentials.GetMonitoringToken(), Body, Status, Answer) then
+            Error(MonitoringUnreachableErr, ADLSESetup."Monitoring URL", GetLastErrorText());
+        if (Status < 200) or (Status > 299) then
+            Error(MonitoringRefusedErr, Status, Answer);
+        exit(StrSubstNo(MonitoringAnsweredTxt, Status, Answer));
+    end;
+
     procedure ReportExportStarted(TablesStarted: Integer; TablesEnabled: Integer; TablesUnreadable: Text)
     var
         ADLSESetup: Record "ADLSE Setup";
@@ -167,6 +196,18 @@ codeunit 82586 "ADLSE Monitor"
     [TryFunction]
     local procedure TrySend(Url: Text; User: Text; Token: Text; Body: Text)
     var
+        Status: Integer;
+        Answer: Text;
+    begin
+        if Send(Url, User, Token, Body, Status, Answer) then;
+    end;
+
+    /// <summary>
+    /// Posts one event; false when the monitoring URL could not be reached, else its status and body.
+    /// </summary>
+    [NonDebuggable]
+    local procedure Send(Url: Text; User: Text; Token: Text; Body: Text; var Status: Integer; var Answer: Text): Boolean
+    var
         Base64Convert: Codeunit "Base64 Convert";
         Client: HttpClient;
         Content: HttpContent;
@@ -179,7 +220,11 @@ codeunit 82586 "ADLSE Monitor"
         ContentHeaders.Add('Content-Type', 'application/json');
         Client.DefaultRequestHeaders().Add('Authorization', 'Basic ' + Base64Convert.ToBase64(User + ':' + Token));
         Client.Timeout(10000);
-        if Client.Post(Url, Content, Response) then;
+        if not Client.Post(Url, Content, Response) then
+            exit(false);
+        Status := Response.HttpStatusCode();
+        Response.Content().ReadAs(Answer);
+        exit(true);
     end;
 
     /// <summary>

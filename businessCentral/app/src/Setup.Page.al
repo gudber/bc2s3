@@ -414,6 +414,20 @@ page 82560 "ADLSE Setup"
                     CurrPage.Update(false);
                 end;
             }
+            action(CheckMonitoring)
+            {
+                ApplicationArea = All;
+                Caption = 'Check monitoring';
+                ToolTip = 'Sends a test event to the monitoring URL and shows what it answered, e.g. that it refused the token.';
+                Image = TestReport;
+
+                trigger OnAction()
+                var
+                    ADLSEMonitor: Codeunit "ADLSE Monitor";
+                begin
+                    Message('%1', ADLSEMonitor.CheckMonitoring());
+                end;
+            }
             action(ScheduleEvery30Minutes)
             {
                 ApplicationArea = All;
@@ -555,6 +569,7 @@ page 82560 "ADLSE Setup"
                     actionref(Schedule_Promoted; Schedule) { }
                     actionref(AddAllTables_Promoted; AddAllTables) { }
                     actionref(ScheduleEvery30Minutes_Promoted; ScheduleEvery30Minutes) { }
+                    actionref(CheckMonitoring_Promoted; CheckMonitoring) { }
                     actionref(ClearSchemaExported_Promoted; ClearSchemaExported) { }
                 }
                 actionref(ClearDeletedRecordsList_Promoted; ClearDeletedRecordsList) { }

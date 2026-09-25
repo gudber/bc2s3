@@ -24,6 +24,7 @@ codeunit 85580 "ADLSE S3 Export Tests"
         DeltasPrefixTok: Label 'https://fsn1.your-objectstorage.com/bc2adls/deltas/ReasonCode-231/', Locked = true;
         MonitoringUrlTok: Label 'https://eu1-api.openobserve.ai/api/test-org/bc_export/_json', Locked = true;
         MonitoringStatus: Integer;
+        MonitoringAnswerTok: Label '{"answer":"from the monitoring"}', Locked = true;
         PutStatus: Integer;
 
     [Test]
@@ -442,6 +443,66 @@ codeunit 85580 "ADLSE S3 Export Tests"
         LibraryAssert.AreNotEqual('', ADLSEMonitorRecorder.Value(Reported, 'call_stack').AsText(), 'call_stack');
     end;
 
+    [Test]
+    [HandlerFunctions('S3Handler')]
+    procedure TestCheckMonitoring_GivesTheAnswerOfTheMonitoringUrl()
+    var
+        ADLSEMonitor: Codeunit "ADLSE Monitor";
+        Answer: Text;
+    begin
+        // [SCENARIO] Checking the monitoring sends a test event and says what the monitoring URL answered
+        // [GIVEN] A monitoring URL that accepts events
+        Initialize();
+        SetUpReasonCodeExportToS3();
+        SetMonitoring(200);
+
+        // [WHEN] The monitoring is checked
+        Answer := ADLSEMonitor.CheckMonitoring();
+
+        // [THEN] A test event was posted, and the answer is given
+        LibraryAssert.IsTrue(Requests.Contains('POST ' + MonitoringUrlTok), 'A test event should be posted');
+        LibraryAssert.IsTrue(Answer.Contains('200'), 'The answer should give the status: ' + Answer);
+        LibraryAssert.IsTrue(Answer.Contains(MonitoringAnswerTok), 'The answer should give the body: ' + Answer);
+    end;
+
+    [Test]
+    [HandlerFunctions('S3Handler')]
+    procedure TestCheckMonitoring_FailsWithTheRefusalOfTheMonitoringUrl()
+    var
+        ADLSEMonitor: Codeunit "ADLSE Monitor";
+    begin
+        // [SCENARIO] A refused test event fails the check with the status and body, e.g. a wrong token
+        // [GIVEN] A monitoring URL that answers 401
+        Initialize();
+        SetUpReasonCodeExportToS3();
+        SetMonitoring(401);
+
+        // [WHEN] The monitoring is checked
+        asserterror ADLSEMonitor.CheckMonitoring();
+
+        // [THEN] The error gives the status and the body
+        LibraryAssert.IsTrue(GetLastErrorText().Contains('401'), 'The error should give the status: ' + GetLastErrorText());
+        LibraryAssert.IsTrue(GetLastErrorText().Contains(MonitoringAnswerTok), 'The error should give the body: ' + GetLastErrorText());
+    end;
+
+    [Test]
+    [HandlerFunctions('S3Handler')]
+    procedure TestCheckMonitoring_WithoutMonitoringUrlSaysSo()
+    var
+        ADLSEMonitor: Codeunit "ADLSE Monitor";
+    begin
+        // [SCENARIO] Checking the monitoring without a monitoring URL says it is not set
+        // [GIVEN] No monitoring URL
+        Initialize();
+        SetUpReasonCodeExportToS3();
+
+        // [WHEN] The monitoring is checked
+        asserterror ADLSEMonitor.CheckMonitoring();
+
+        // [THEN] The error names the missing URL
+        LibraryAssert.IsTrue(GetLastErrorText().Contains('monitoring URL'), 'The error should name the monitoring URL: ' + GetLastErrorText());
+    end;
+
     [MessageHandler]
     procedure ExportStartedMessageHandler(Message: Text[1024])
     begin
@@ -482,6 +543,7 @@ codeunit 85580 "ADLSE S3 Export Tests"
         Response.HttpStatusCode := 200;
         if Url = MonitoringUrlTok then begin
             Response.HttpStatusCode := MonitoringStatus;
+            Response.Content.WriteFrom(MonitoringAnswerTok);
             exit(false);
         end;
         if (Request.RequestType() = HttpRequestType::Put) and (PutStatus <> 0) then
