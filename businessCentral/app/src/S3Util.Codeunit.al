@@ -24,15 +24,9 @@ codeunit 82585 "ADLSE S3 Util"
 
     procedure PutObject(Url: Text; Body: Text; ContentType: Text)
     var
-        Content: HttpContent;
-        ContentHeaders: HttpHeaders;
         Response: HttpResponseMessage;
     begin
-        Content.WriteFrom(Body);
-        Content.GetHeaders(ContentHeaders);
-        ContentHeaders.Remove('Content-Type');
-        ContentHeaders.Add('Content-Type', ContentType);
-        Response := Send('PUT', Url, Content);
+        Response := Send('PUT', Url, Body, ContentType);
         if not Response.IsSuccessStatusCode() then
             Error(RequestRejectedErr, 'PUT', Url, Response.HttpStatusCode(), ReadBody(Response));
         OnAfterPutObject(Url, Body);
@@ -48,10 +42,9 @@ codeunit 82585 "ADLSE S3 Util"
 
     procedure GetObject(Url: Text; var ObjectExists: Boolean): Text
     var
-        Content: HttpContent;
         Response: HttpResponseMessage;
     begin
-        Response := Send('GET', Url, Content);
+        Response := Send('GET', Url, '', '');
         ObjectExists := Response.IsSuccessStatusCode();
         if ObjectExists then
             exit(ReadBody(Response));
@@ -95,8 +88,48 @@ codeunit 82585 "ADLSE S3 Util"
         exit(UtcIso8601.Replace('-', '').Replace(':', ''));
     end;
 
-    local procedure Send(Method: Text; Url: Text; Content: HttpContent) Response: HttpResponseMessage
+    /// <summary>
+    /// Sends a request, and again while S3 throttles it, fails on its side or cannot be reached: up to four attempts,
+    /// pausing 1, 2 and 4 seconds between them, each signed anew. The last answer is S3's final one.
+    /// </summary>
+    local procedure Send(Method: Text; Url: Text; Body: Text; ContentType: Text) Response: HttpResponseMessage
     var
+        Attempt: Integer;
+        Sent: Boolean;
+        PauseMilliseconds: Integer;
+    begin
+        PauseMilliseconds := 1000;
+        for Attempt := 1 to MaxAttempts() do begin
+            Clear(Response);
+            Sent := SendOnce(Method, Url, Body, ContentType, Response);
+            if Sent and not IsTransient(Response.HttpStatusCode()) then
+                exit(Response);
+            if Attempt < MaxAttempts() then begin
+                Sleep(PauseMilliseconds);
+                PauseMilliseconds *= 2;
+            end;
+        end;
+        if not Sent then
+            Error(RequestFailedErr, Method, Url, GetLastErrorText());
+    end;
+
+    local procedure MaxAttempts(): Integer
+    begin
+        exit(4);
+    end;
+
+    /// <summary>
+    /// Whether S3's answer may be different when asked again: throttling and its own failures.
+    /// </summary>
+    local procedure IsTransient(Status: Integer): Boolean
+    begin
+        exit((Status = 429) or ((Status >= 500) and (Status <= 599)));
+    end;
+
+    local procedure SendOnce(Method: Text; Url: Text; Body: Text; ContentType: Text; var Response: HttpResponseMessage): Boolean
+    var
+        Content: HttpContent;
+        ContentHeaders: HttpHeaders;
         ADLSES3Signer: Codeunit "ADLSE S3 Signer";
         Client: HttpClient;
         Request: HttpRequestMessage;
@@ -113,8 +146,13 @@ codeunit 82585 "ADLSE S3 Util"
 
         Request.Method(Method);
         Request.SetRequestUri(Url);
-        if Method = 'PUT' then
+        if Method = 'PUT' then begin
+            Content.WriteFrom(Body);
+            Content.GetHeaders(ContentHeaders);
+            ContentHeaders.Remove('Content-Type');
+            ContentHeaders.Add('Content-Type', ContentType);
             Request.Content(Content);
+        end;
         Request.GetHeaders(RequestHeaders);
         RequestHeaders.Add('x-amz-content-sha256', SignedHeaders.Get('x-amz-content-sha256'));
         RequestHeaders.Add('x-amz-date', SignedHeaders.Get('x-amz-date'));
@@ -122,8 +160,7 @@ codeunit 82585 "ADLSE S3 Util"
         if not RequestHeaders.TryAddWithoutValidation('Authorization', ADLSES3Signer.Authorization(Method, Path, Query, SignedHeaders, UnsignedPayloadTok, Region, AccessKeyId, SecretAccessKey)) then
             Error(RequestFailedErr, Method, Url, AuthorizationHeaderRejectedErr);
 
-        if not Client.Send(Request, Response) then
-            Error(RequestFailedErr, Method, Url, GetLastErrorText());
+        exit(Client.Send(Request, Response));
     end;
 
     /// <summary>
