@@ -486,7 +486,6 @@ codeunit 85580 "ADLSE S3 Export Tests"
     end;
 
     [Test]
-    [HandlerFunctions('S3Handler')]
     procedure TestCheckMonitoring_WithoutMonitoringUrlSaysSo()
     var
         ADLSEMonitor: Codeunit "ADLSE Monitor";
